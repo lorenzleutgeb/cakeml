@@ -1,5 +1,6 @@
-The CakeML project: https://cakeml.org
-======================================
+![The CakeML Logo, an iconified, orange piece of cake. Next to it the words "CakeML: A Verified Implementation of ML"](https://cakeml.org/cakeml-with-subtitle.svg)
+
+# The [CakeML](https://cakeml.org) Project
 
 CakeML is a verified implementation of a significant subset of
 Standard ML.
@@ -15,8 +16,7 @@ The [master](../../tree/master) branch contains the latest development
 version of CakeML. See the [version2](../../tree/version2) or
 [version1](../../tree/version1) branch for previous versions.
 
-Directory structure
--------------------
+## Directory Structure
 
 [COPYING](COPYING):
 CakeML Copyright Notice, License, and Disclaimer.
@@ -29,12 +29,12 @@ similar to the standard basis library of SML.
 This file describes how to install Poly/ML, HOL and CakeML.
 
 [candle](candle):
-Verification of a HOL theorem prover, based on HOL Light
-(http://www.cl.cam.ac.uk/~jrh13/hol-light/), implemented in CakeML.
+Verification of a HOL theorem prover, based on
+[HOL Light](http://www.cl.cam.ac.uk/~jrh13/hol-light/), implemented in CakeML.
 
 [characteristic](characteristic):
-A verified CakeML adaption of Arthur Charguéraud's "Characteristic
-Formulae for the Verification of Imperative Programs"
+A verified CakeML adaption of Arthur Charguéraud's
+"[Characteristic Formulae for the Verification of Imperative Programs](https://doi.org/10.1145/2034773.2034828)"
 
 [compiler](compiler):
 A verified compiler for CakeML, including:
@@ -59,7 +59,7 @@ and what we want to use for CakeML development.
 
 [semantics](semantics):
 The definition of the CakeML language. The definition is (mostly)
-expressed in Lem (http://www.cs.kent.ac.uk/~sao/lem), but the
+expressed in [Lem](http://www.cs.kent.ac.uk/~sao/lem), but the
 generated HOL is also included. The directory includes definitions of:
  - the concrete syntax
  - the abstract syntax
