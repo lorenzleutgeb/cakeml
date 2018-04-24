@@ -1,0 +1,14 @@
+addons:
+  apt:
+    packages:
+      - polyml
+
+install:
+  #- wget https://raw.githubusercontent.com/ocaml/opam/master/shell/install.sh -O developers/install-opam.sh
+  #- sh developers/install-opam.sh --fresh
+  #- opam init -y --comp 4.05.0
+  #- opam install -y num
+  #- opam install -y ocamlfind
+  - git clone https://github.com/HOL-Theorem-Prover/HOL.git
+  - cd HOL && poly <  tools/smart-configure.sml && bin/build --nograph
+  - HOLDIR=HOL /usr/bin/time --format='%e %M' --output='timing' HOL/bin/Holmake --qof
