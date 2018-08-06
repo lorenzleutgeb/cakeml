@@ -19,7 +19,7 @@
  * These exceptions are marked with comments.
  *)
 
-open HolKernel boolLib Parse bossLib wordsTheory binary_ieeeTheory integer_wordLib
+open HolKernel boolLib Parse bossLib wordsTheory binary_ieeeTheory integer_wordLib arithmetic
 
 val _ = ParseExtras.tight_equality()
 
@@ -37,20 +37,7 @@ val ne_list_last_length = store_thm(
   Cases_on `isne` >> rw[to_list_def]
 );
 
-(* TODO: Not directly present in spec. *)
-val _ = (* Immediate *)
-  type_abbrev("i", ``:num``)
-
-val _ = (* Static Offset *)
-  type_abbrev("off", ``:num``)
-
-val _ = (* Alignment Exponent *)
-  type_abbrev("a", ``:num``)
-
 (* 2  Structure *)
-(* This section describes an abstract syntax which is shared by the
- * binary format and the text format.
- *)
 
 (* 2.1.1  Grammar Notation
  * A^n is translated as A list
@@ -92,24 +79,17 @@ val _ = type_abbrev("name", ``:(codepoint list)``)
 val _ = Datatype `valtype = T_i32 | T_i64 | T_f32 | T_f64`
 
 val bit_width_def = Define
-  `bit_width t = case t of T_i32 => 32
-                         | T_i64 => 64
-                         | T_f32 => 32
-                         | T_f64 => 64`
+  `bit_width t = case t of T_i32 => 32n
+                         | T_i64 => 64n
+                         | T_f32 => 32n
+                         | T_f64 => 64n`
 
-val _ = Datatype
-  `tp = Tp_i8 | Tp_i16 | Tp_i32`
+val _ = Datatype `tp = Tp_i8 | Tp_i16 | Tp_i32`
 
-val t_length_def = Define
-  `t_length t = case t of T_i32 => 4
-                        | T_i64 => 8
-                        | T_f32 => 4
-                        | T_i64 => 8`
-
-val tp_length_def = Define
-  `tp_length t = case t of Tp_i8  => 1
-                         | Tp_i16 => 2
-                         | Tp_i32 => 4`
+val bit_width_p_def = Define
+  `bit_width_p t = case t of Tp_i8  =>  8n
+                           | Tp_i16 => 16n
+                           | Tp_i32 => 32n`
 
 val is_int_t_def = Define
   `is_int_t t = case t of T_i32 => T
@@ -130,11 +110,14 @@ val int_float_disjoint = store_thm(
 )
 
 (* 2.3.2  Result Types *)
+(* TODO: This may be a bit too general. Currently,
+         wasm allows these lists to be of length <= 1. *)
 val _ = type_abbrev("resulttype", ``:(valtype list)``)
 
 (* 2.3.3  Function Types *)
 val _ = Datatype `functype = Tf (valtype vec) (valtype vec)`
 val _ = set_mapped_fixity {tok = "_>", fixity = Infixr 700, term_name = "Tf"}
+val _ = set_mapped_fixity {tok = "⟿", fixity = Infixr 700, term_name = "Tf"}
 
 (* 2.3.4  Limits *)
 val _ = Datatype `limits = <| min: u32; max: u32 option |>`
@@ -143,10 +126,11 @@ val _ = Datatype `limits = <| min: u32; max: u32 option |>`
 val _ = type_abbrev("memtype", ``:limits``)
 
 (* 2.3.6  Table Types *)
-(* TODO: Why does this not work? *)
-(*val _ = type_abbrev("anyfunc", ``:'a -> 'b``)*)
-val _ = type_abbrev("anyfunc", ``:num``)
-val _ = type_abbrev("elemtype", ``:anyfunc``)
+(* NOTE: We only have one constructor for elemtype, which might seem odd,
+ *       but the spec explicitly mentions that there might be more in the
+ *       future.
+ *)
+val _ = Datatype `elemtype = T_anyfunc`
 val _ = Datatype `tabletype = T_table limits elemtype`
 
 (* 2.3.7  Global Types *)
@@ -193,9 +177,6 @@ val _ = Datatype
 val _ = Datatype
   `cvtop = Convert | Reinterpret`
 
-val _ = Datatype
-  `const = Const valtype`
-
 val _ = Datatype `memarg = <| offset: word32; align: word32 |>`
 
 (* 2.5.1  Indices *)
@@ -210,11 +191,7 @@ val _ = type_abbrev("labelidx", ``:word32``)
 
 (* 4.2.1  Values *)
 (* Moved up since frame depends on v. *)
-val _ = Datatype `
-                 v = ConstInt32   i32
-  | ConstInt64   i64
-  | ConstFloat32 f32
-  | ConstFloat64 f64`
+val _ = Datatype `val = ConstInt32 i32 | ConstInt64 i64 | ConstFloat32 f32 | ConstFloat64 f64`
 
 (* 4.2.4  Addresses *)
 (* https://www.w3.org/TR/2018/WD-wasm-core-1-20180215/#addresses%E2%91%A0 *)
@@ -236,23 +213,22 @@ val _ = Datatype `exportinst = <| name: name; value: externval |>`
 (* 4.2.5  Module Instances *)
 (* https://www.w3.org/TR/2018/WD-wasm-core-1-20180215/#module-instances%E2%91%A0 *)
 (* Moved up since funcinst needs moduleinst. *)
-val _ = Datatype
-`moduleinst = <|
-            types : functype list;
-         funcaddrs : funcaddr list   ;
-         tableaddrs   : tableaddr list ;
-         memaddrs   : memaddr list ;
-         globaladdrs : globaladdr list ;
-         exports : exportinst list
-                              |>`
+val _ = Datatype `moduleinst = <|
+  types:       functype   list;
+  funcaddrs:   funcaddr   list;
+  tableaddrs:  tableaddr  list;
+  memaddrs:    memaddr    list;
+  globaladdrs: globaladdr list;
+  exports:     exportinst list
+|>`
 
 (* 4.2.12.3  Frames *)
 (* Moved up since instr depends on frame. *)
-val _ = Datatype `frame = <| locals: v list; module: moduleinst |>`
+val _ = Datatype `frame = <| locals: val list; module: moduleinst |>`
 
 val _ = Datatype `instr =
 (* 2.4.1  Numeric Instructions *)
-    Const valtype
+    Const val
   | Unop_i valtype iunop
   | Unop_f valtype funop
   | Binop_i valtype ibinop
@@ -282,9 +258,9 @@ val _ = Datatype `instr =
 (* 2.4.5  Control Instructions *)
   | Unreachable
   | Nop
-  | Block functype (instr list)
-  | Loop functype (instr list)
-  | If functype (instr list) (instr list)
+  | Block resulttype (instr list)
+  | Loop resulttype (instr list)
+  | If resulttype (instr list) (instr list)
   | Br labelidx
   | Br_if labelidx
     (* TODO: labelidx vec should be nonempty! *)
@@ -392,7 +368,7 @@ val typeof_def = Define `
 val types_agree_def = Define `types_agree t v = (typeof v = t)`
 
 (* 2.4.6  Expressions *)
-val _ = type_abbrev("expr", ``:instr list``)
+val _ = Datatype `expr = Expr (instr list)`
 
 (* 2.5  Modules *)
 (* The definition of module is at the end of the section. *)
@@ -439,41 +415,144 @@ val _ = Datatype `importdesc =
 val _ = Datatype `import = <| module: name; name: name; desc: importdesc |>`
 
 val _ = Datatype `module = <|
-  types: functype vec;
-  funcs: func vec;
-  tables: table vec;
-  mems: mem vec;
-  globals: global vec;
-  elem: elem vec;
-  data: data vec;
-  start: start option;
-  imports: import vec;
-  exports: export vec
+  types:   functype vec;
+  funcs:   func     vec;
+  tables:  table    vec;
+  mems:    mem      vec;
+  globals: global   vec;
+  elem:    elem     vec;
+  data:    data     vec;
+  start:   start    option;
+  imports: import   vec;
+  exports: export   vec
 |>`
 
 (* 3  Validation *)
 (* 3.1.1  Contexts *)
 (* https://www.w3.org/TR/2018/WD-wasm-core-1-20180215/#contexts%E2%91%A0 *)
 val _ = Datatype `context = <|
-  types: functype list;
-  funcs: functype list;
-  tables: tabletype list;
-  mems: memtype list;
+  types:   functype   list;
+  funcs:   functype   list;
+  tables:  tabletype  list;
+  mems:    memtype    list;
   globals: globaltype list;
-  locals: valtype list;
-  labels: resulttype list;
-  return: resulttype option
+  locals:  valtype    list;
+  labels:  resulttype list;
+  return:  resulttype option
 |>`
 
 (* 3.2  Types *)
-(* TODO: Encode typing rules. *)
 (* Following operator shall correspond to the typing rule operator. *)
-val _ = set_mapped_fixity {fixity = Infix(NONASSOC, 450),
-  tok = "|-", term_name = "typ"}
+val _ = add_rule {
+  fixity      = Infix(NONASSOC, 450),
+  pp_elements = [
+    HardSpace 1,
+    TOK "|-",
+    HardSpace 1,
+    TM,
+    HardSpace 1,
+    TOK "::-",
+    HardSpace 1
+  ],
+  term_name   = "typ",
+  paren_style = OnlyIfNecessary,
+  block_style = (AroundEachPhrase, (PP.CONSISTENT, 0))
+}
+val _ = add_rule {
+  fixity      = Infix(NONASSOC, 450),
+  pp_elements = [
+    HardSpace 1,
+    TOK "⫢",
+    HardSpace 1,
+    TM,
+    HardSpace 1,
+    TOK "⫶",
+    HardSpace 1
+  ],
+  term_name   = "typ",
+  paren_style = OnlyIfNecessary,
+  block_style = (AroundEachPhrase, (PP.CONSISTENT, 0))
+}
 
+(* 3.2  Types *)
 
-(* 3.3  Instructions *)
-(* TODO: Encode typing rules. *)
+(* Shorthands for common function types. *)
+val endofunc_def = Define `endofunc t = t _> t`
+val consumes_def = Define `consumes t = t _> []`
+val produces_def = Define `produces t = [] _> t`
+
+(* Helper mostly used to check something is defined correctly in the context. *)
+val has_def = Define `has xs i x = (((LENGTH xs) < i) /\ ((EL i xs) = x))`
+
+(* Helper that takes a context and prepends a label to its labels. *)
+val labelled_def = Define `labelled c l = (c with labels := (l :: c.labels))`
+
+(* Helper to check well-formedness of Memory Instructions. *)
+val alignok_def = Define `alignok ma n =  ((2 EXP (w2n ma.align)) <= (n DIV 8))`
+
+(* Helper to check whether a context has some defined memory. *)
+val hasmem_def = Define `hasmem c = (c.mems <> [])`
+
+(* NOTE: Typing of Instructions is combined with typing of Instruction Sequences. *)
+val (typ_rules, typ_cases, typ_ind) = Hol_reln `
+(* 3.3.1.1 *)
+(! c v . c |- [Const v] ::- ([] _> [(typeof v)])) /\
+(* 3.3.1.2 - 3.3.1.5 *)
+(! c t p . is_int_t t ==> c |- [Unop_i t p] ::- endofunc [t]) /\
+(! c t p . is_float_t t ==> c |- [Unop_f t p] ::- endofunc [t]) /\
+(! c t p . is_int_t t ==> c |- [Binop_i t p] ::- ([t; t] _> [t])) /\
+(! c t p . is_float_t t ==> c |- [Binop_f t p] ::- ([t; t] _> [t])) /\
+(! c t p . is_int_t t ==> c |- [Testop_i t p] ::- ([t] _> [T_i32])) /\
+(! c t p . is_int_t t ==> c |- [Relop_i t p] ::- ([t; t] _> [T_i32])) /\
+(! c t p . is_float_t t ==> c |- [Relop_f t p] ::- ([t; t] _> [T_i32])) /\
+(* 3.3.1.6 *)
+(! c t1 t2 . (t1 <> t2 /\ ((is_float_t t1 /\ is_float_t t2) \/ (is_int_t t1 /\ is_int_t t2 /\ t_length t1 < t_length t2))) ==> (c |- [Cvtop t1 Convert t2 None] ::- ([t2] _> [t1]))) /\
+(! c t1 t2 . (t1 <> t2 /\ t_length t1 = t_length t2) ==> c |- [Cvtop t1 Reinterpret t2 NONE] ::- ([t2] _> [t1])) /\
+(* 3.3.2.1 - 3.3.2.2. *)
+(! c t . c |- [Drop] ::- consumes [t]) /\
+(! c t . c |- [Select] ::- [t; t; T_i32] _> [t]) /\
+(* 3.3.3.1  - 3.3.3.5 *)
+(! c t x . (has c.locals x t) ==> c |- [Get_local (n2w x)] ::- produces [t]) /\
+(! c t x . (has c.locals x t) ==> c |- [Set_local (n2w x)] ::- consumes [t]) /\
+(! c t x . (has c.locals x t) ==> c |- [Tee_local (n2w x)] ::- endofunc [t]) /\
+(! c t x m . (has c.globals x (T_global m t)) ==> c |- [Get_global (n2w x)] ::- produces [t]) /\
+(! c t x . (has c.globals x (T_global T_var t)) ==> c |- [Set_global (n2w x)] ::- consumes [t]) /\
+(* 3.3.4.1 - 3.3.4.2 *)
+(! c t . (hasmem c /\ (alignok ma (bit_width t))) ==> c |- [Load t NONE ma] ::- [T_i32] _> [t]) /\
+(! c t tp . (hasmem c /\ (alignok ma (bit_width_p tp)) /\ (FST arg) = tp) ==> c |- [Load t (SOME arg) ma] ::- [T_i32] _> [t]) /\
+(* 3.3.4.3 - 3.3.4.4 *)
+(! c t . (hasmem c /\ (alignok ma (bit_width t))) ==> c |- [Store t NONE ma] ::- consumes [T_i32; t]) /\
+(! c t tp . (hasmem c /\ (alignok ma (bit_width_p tp))) ==> c |- [Store t (SOME tp) ma] ::- consumes [T_i32; t]) /\
+(* 3.3.4.5 - 3.3.4.6 *)
+(! c . hasmem c ==> c |- [Current_memory] ::- produces [T_i32]) /\
+(! c . hasmem c ==> c |- [Grow_memory] ::- endofunc [T_i32]) /\
+(* 3.3.5.1 - 3.3.5.2 *)
+(! c . c |- [Nop] ::- endofunc []) /\
+(! c t1s t2s . c |- [Unreachable] ::- t1s _> t2s) /\
+(* 3.3.5.3 - 3.3.5.5 *)
+(! c ts is . (labelled c ts |- is ::- produces ts) ==> c |- [Block ts is] ::- produces ts) /\
+(! c ts is . (labelled c ts |- is ::- produces ts) ==> c |- [Loop ts is] ::- produces ts) /\
+(! c ts i1s i2s . ((((labelled c ts) |- i1s ::- produces ts) /\ ((labelled c ts) |- i2s ::- produces ts)) ==> c |- [If ts i1s i2s] ::- [T_i32] _> [t])) /\
+(* 3.3.5.6 *)
+(! c ts t1s t2s l . (has c.labels l ts) ==> c |- [Br (n2w l)] ::- (t1s ++ ts) _> t2s) /\
+(* 3.3.5.7 *)
+(! c ts l . (has c.labels l ts) ==> c |- [Br_if (n2w l)] ::- (ts ++ [T_i32]) _> ts) /\
+(* 3.3.5.8 *)
+(! c ts ln ls . (has c.labels ln ts /\ EVERY (\x . has c.labels x ts) ls) ==> c |- [Br_table (MAP n2w ls) (n2w ln)] ::- (ts ++ [T_i32]) _> ts) /\
+(* 3.3.5.9 *)
+(! c t t1s t2s . (c.return = (SOME t)) ==> c |- [Return] ::- (t1s ++ t) _> t2s) /\
+(* 3.3.5.10 *)
+(! c t x . (has c.funcs x t) ==> c |- [Call (n2w x)] ::- t) /\
+(* 3.3.5.11 *)
+(! c t1s t2s x ls . (has c.tables 0 (T_table ls T_anyfunc) /\ has c.types x (t1s _> t2s)) ==> c |- [Call_indirect (n2w x)] ::- (t1s ++ [T_i32]) _> t2s) /\
+(* 3.3.6.1 *)
+(! c ts . c |- [] ::- endofunc ts) /\
+(* 3.3.6.2 *)
+(! c t0s t1s t2s t3s ts i1s i2s . (t2s <> [] /\ t2s = (t0s ++ ts) /\ (c |- i1s ::- t1s _> (t0s ++ ts)) /\ (c |- i2s ::- ts _> t3s)) ==> (c |- (i1s ++ i2s) ::- t1s _> (t0s ++ t3s)))
+`
+
+(* TODO: 3.3.7.1 *)
+(* (! c is ts . (c |- is ::- [] _> ts) ==> c |- (Expr is) ::- ts) *)
 
 (*
 val _ = Datatype
@@ -532,7 +611,7 @@ val _ = Datatype
 (* 4.2.1  Values [moved-up] *)
 
 (* 4.2.2  Results *)
-val _ = Datatype `result = Result (v list) | Trap`
+val _ = Datatype `result = Result (val list) | R_Trap`
 
 (* 4.2.6  Function Instances *)
 (* https://www.w3.org/TR/2018/WD-wasm-core-1-20180215/#function-instances%E2%91%A0 *)
@@ -554,13 +633,13 @@ val _ = Datatype `meminst = <| data: byte vec; max: u32 |>`
 (* https://www.w3.org/TR/2018/WD-wasm-core-1-20180215/#global-instances%E2%91%A0 *)
 (* Moved up since store needs globalinst. *)
 val _ = Datatype
-`globalinst = <| value: v; mut: mut |>`
+`globalinst = <| value: val; mut: mut |>`
 
 (* 4.2.3  Store *)
 val _ = Datatype `store = <|
-  funcs: funcinst list;
-  tables: tableinst list;
-  mems: meminst list;
+  funcs:   funcinst   list;
+  tables:  tableinst  list;
+  mems:    meminst    list;
   globals: globalinst list
 |>`
 
@@ -577,7 +656,7 @@ val globalinst_is_var_def = Define
 (* 4.2.11  External Values [moved-up] *)
 
 (* 4.2.12.2  Labels *)
-val _ = Datatype `label = Label num (instr list)`
+val _ = Datatype `label = T_Label num (instr list)`
 
 (* 4.2.12.3  Frames *)
 (* Definition of frame was moved up. *)
@@ -586,7 +665,12 @@ val _ = `Datatype activation = Activation num frame`
 (* 4.2.13  Administrative Instructions [moved-up] *)
 
 (* 4.2.13.1  Block Contexts *)
-(* TODO: Should B0 and BK1 be a Hol_reln? *)
+val _ = Datatype `block = B0 (val list) (instr list) | Bk (val list) label block (instr list)`
+
+val _ = Define `
+(bc_apply (B0 vs is) js = (MAP Const vs) ++ (js ++ is)) /\
+(bc_apply (Bk vs (T_Label n is) b is2) i = (MAP Const vs) ++ [Label n is (bc_apply b i ++ is2)])
+`
 
 (* 4.2.13.2  Configurations *)
 val _ = Datatype `thread = Thread frame (instr list)`
@@ -597,14 +681,13 @@ val _ = Datatype `config = Config store thread`
 
 (* 4.1.2  Formal Notation *)
 (* Following operator shall correspond to the reduction rule operator. *)
-val _ = set_mapped_fixity {fixity = Infix(NONASSOC, 450),
-                           tok = "-->", term_name = "redn"}
+val _ = set_mapped_fixity {
+  fixity = Infix(NONASSOC, 450),
+  tok = "-->",
+  term_name = "redn"
+}
 
 (* 4.3  Numerics *)
-(* val load_store_t_bounds_def = Define *)
-(*   `load_store_bounds a tp t = case tp of NONE => 2 ** a <= t_length t *)
-(*         | SOME tp => (2 ** a <= tp_length tp /\ tp_length tp <= t_length t /\ is_int_t t)` *)
-
 (* be_typing, cl_typing, e_typing *)
 (*
 val _ = Define `
