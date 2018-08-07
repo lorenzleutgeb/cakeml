@@ -56,19 +56,19 @@ val _ = add_rule {
 (* 3.2  Types *)
 
 (* 3.2.1  Limits*)
-val typ_limit_def = Define `typ_limit l = case l.max of NONE => T | SOME m => (w2n m) <= (w2n l.min)`
+val limit_ok_def = Define `limit_ok l = case l.max of NONE => T | SOME m => (w2n m) <= (w2n l.min)`
 
 (* 3.2.2  Function Types *)
-val typ_functype_def = Define `typ_functype (t1s _> t2s) = ((LENGTH t2s) < 1n)`
+val functype_ok_def = Define `functype_ok (t1s _> t2s) = ((LENGTH t2s) < 1n)`
 
 (* 3.2.3  Table Types *)
-val typ_tabletype_def = Define `typ_tabletype (T_table ls elt) = typ_limit ls`
+val tabletype_ok_def = Define `tabletype_ok (T_table ls elt) = limit_ok ls`
 
 (* 3.2.4 Memory Types *)
-val typ_memtype_def = Define `typ_memtype = typ_limit`
+val memtype_ok_def = Define `memtype_ok = limit_ok`
 
-(* 3.2.5  Global Types *)
-val typ_globaltype_def = Define `typ_globaltype (g:globaltype) = T`
+(* (* 3.2.5  Global Types *) *)
+val globaltype_ok_def = Define `globaltype_ok g = T`
 
 (* 3.3  Instructions *)
 
@@ -84,7 +84,7 @@ val has_def = Define `has xs i x = ((i < (LENGTH xs)) /\ ((EL i xs) = x))`
 val labelled_def = Define `labelled c l = (c with labels := (l :: c.labels))`
 
 (* Helper to check well-formedness of Memory Instructions. *)
-val alignok_def = Define `alignok ma n =  ((2 EXP (w2n ma.align)) <= (n DIV 8))`
+val align_ok_def = Define `align_ok ma n =  ((2 EXP (w2n ma.align)) <= (n DIV 8))`
 
 (* Helper to check whether a context has some defined memory. *)
 val hasmem_def = Define `hasmem c = (c.mems <> [])`
@@ -102,8 +102,8 @@ val (typ_rules, typ_cases, typ_ind) = Hol_reln `
 (! c t p . is_int_t t ==> c |- [Relop_i t p] ::- ([t; t] _> [T_i32])) /\
 (! c t p . is_float_t t ==> c |- [Relop_f t p] ::- ([t; t] _> [T_i32])) /\
 (* 3.3.1.6 *)
-(! c t1 t2 . (t1 <> t2 /\ ((is_float_t t1 /\ is_float_t t2) \/ (is_int_t t1 /\ is_int_t t2 /\ t_length t1 < t_length t2))) ==> (c |- [Cvtop t1 Convert t2 None] ::- ([t2] _> [t1]))) /\
-(! c t1 t2 . (t1 <> t2 /\ t_length t1 = t_length t2) ==> c |- [Cvtop t1 Reinterpret t2 NONE] ::- ([t2] _> [t1])) /\
+(! c t1 t2 . (t1 <> t2 /\ ((is_float_t t1 /\ is_float_t t2) \/ (is_int_t t1 /\ is_int_t t2 /\ bit_width t1 < bit_width t2))) ==> (c |- [Cvtop t1 Convert t2 NONE] ::- ([t2] _> [t1]))) /\
+(! c t1 t2 . (t1 <> t2 /\ bit_width t1 = bit_width t2) ==> c |- [Cvtop t1 Reinterpret t2 NONE] ::- ([t2] _> [t1])) /\
 (* 3.3.2.1 - 3.3.2.2. *)
 (! c t . c |- [Drop] ::- consumes [t]) /\
 (! c t . c |- [Select] ::- [t; t; T_i32] _> [t]) /\
@@ -114,11 +114,11 @@ val (typ_rules, typ_cases, typ_ind) = Hol_reln `
 (! c t x m . (has c.globals x (T_global m t)) ==> c |- [Get_global (n2w x)] ::- produces [t]) /\
 (! c t x . (has c.globals x (T_global T_var t)) ==> c |- [Set_global (n2w x)] ::- consumes [t]) /\
 (* 3.3.4.1 - 3.3.4.2 *)
-(! c t . (hasmem c /\ (alignok ma (bit_width t))) ==> c |- [Load t NONE ma] ::- [T_i32] _> [t]) /\
-(! c t tp . (hasmem c /\ (alignok ma (bit_width_p tp)) /\ (FST arg) = tp) ==> c |- [Load t (SOME arg) ma] ::- [T_i32] _> [t]) /\
+(! c t . (hasmem c /\ (align_ok ma (bit_width t))) ==> c |- [Load t NONE ma] ::- [T_i32] _> [t]) /\
+(! c t tp . (hasmem c /\ (align_ok ma (bit_width_p tp)) /\ (FST arg) = tp) ==> c |- [Load t (SOME arg) ma] ::- [T_i32] _> [t]) /\
 (* 3.3.4.3 - 3.3.4.4 *)
-(! c t . (hasmem c /\ (alignok ma (bit_width t))) ==> c |- [Store t NONE ma] ::- consumes [T_i32; t]) /\
-(! c t tp . (hasmem c /\ (alignok ma (bit_width_p tp))) ==> c |- [Store t (SOME tp) ma] ::- consumes [T_i32; t]) /\
+(! c t . (hasmem c /\ (align_ok ma (bit_width t))) ==> c |- [Store t NONE ma] ::- consumes [T_i32; t]) /\
+(! c t tp . (hasmem c /\ (align_ok ma (bit_width_p tp))) ==> c |- [Store t (SOME tp) ma] ::- consumes [T_i32; t]) /\
 (* 3.3.4.5 - 3.3.4.6 *)
 (! c . hasmem c ==> c |- [Current_memory] ::- produces [T_i32]) /\
 (! c . hasmem c ==> c |- [Grow_memory] ::- endofunc [T_i32]) /\
@@ -152,10 +152,8 @@ val typ_expr_def = Define `(!c is ts . typ_expr c (Expr is) ts <=> (c |- is ::- 
 
 (* 3.3.7.2 *)
 val is_const_instr_def = Define `is_const_instr c (Const cv) = T /\ is_const_instr c (Get_global x) = (?t . (has c.globals (w2n x) (T_global T_const t)))`
-(* val isconst_def = Define `(! c i x t . i = (Const cv) \/ (i = (Get_global x) /\ (has c.globals (w2n x) (T_global T_const t))))` *)
 
 val is_const_expr_def = Define `is_const_expr c (Expr is) = (EVERY (is_const_instr c) is)`
-
 
 (* 3.4  Modules *)
 
@@ -163,16 +161,16 @@ val is_const_expr_def = Define `is_const_expr c (Expr is) = (EVERY (is_const_ins
 val typ_func_def = Define `(! c f t . typ_func c f t = ? t1s t2s . ((has c.types (w2n f.type) t) /\ (t = t1s _> t2s) /\ (typ_expr (c with <| locals := t1s ++ f.locals; labels := [t2s]; return := SOME t2s |>) f.body t2s)))`
 
 (* 3.4.2.1 *)
-val typ_table_def = Define `typ_table (t:table) = typ_tabletype t.type`
+val typ_table_def = Define `typ_table (t:table) ty <=> tabletype_ok t.type /\ t.type = ty`
 
 (* 3.4.3.1 *)
-val typ_mem_def = Define `typ_mem (m:mem) = typ_memtype m.type`
+val typ_mem_def = Define `typ_mem (m:mem) ty <=> memtype_ok m.type /\ m.type = ty`
 
 (* 3.4.4.1 *)
-val typ_global_def = Define `typ_global c (g:global) t = (typ_globaltype g.type /\ typ_expr c g.init t /\ is_const_expr c g.init)`
+val typ_global_def = Define `typ_global c (g:global) ty <=> ? mut t . ty = T_global mut t /\ (globaltype_ok g.type /\ typ_expr c g.init [t] /\ is_const_expr c g.init) /\ g.type = ty`
 
 (* 3.4.5.1 *)
-val typ_elem_def = Define `typ_elem c e = ? ls . (has c.tables (w2n e.data) (T_table ls T_anyfunc) /\ typ_expr c e.offset [T_i32] /\ is_const_expr c e.offset /\ (EVERY (\x . (?t' . has c.funcs (w2n x) t')) e.init))`
+val elem_ok_def = Define `elem_ok c e = ? ls . (has c.tables (w2n e.table) (T_table ls T_anyfunc) /\ typ_expr c e.offset [T_i32] /\ is_const_expr c e.offset /\ (EVERY (\x . (?t' . has c.funcs (w2n x) t')) e.init))`
 
 (* 3.4.6.1 *)
 val data_ok_def = Define `data_ok c d = ? m . has c.mems (w2n d.data) m /\ typ_expr c d.offset [T_i32] /\ is_const_expr c d.offset`
@@ -180,20 +178,86 @@ val data_ok_def = Define `data_ok c d = ? m . has c.mems (w2n d.data) m /\ typ_e
 (* 3.4.7.1 *)
 val start_ok_def = Define `(! c s . (start_ok c s) <=> (has c.funcs (w2n s.func) (endofunc [])))`
 
-(* 3.4.8.1 *)
-val exportdesc_typ_def = Define `
-(exportdesc_typ c (Export_func x) (Te_func t) <=> (has c.funcs (w2n x) t)) /\
-(exportdesc_typ c (Export_table x) (Te_table t) <=> (has c.tables (w2n x) t)) /\
-(exportdesc_typ c (Export_mem x) (Te_mem t) <=> (has c.mems (w2n x) t)) /\
-(exportdesc_typ c (Export_global x) (Te_global t) <=> (has c.globals (w2n x) t /\ ~is_var t))
+(* 3.4.8.2 - 3.4.8.5 *)
+val typ_exportdesc_def = Define `
+(typ_exportdesc c (Export_func x) (Te_func t) <=> (has c.funcs (w2n x) t)) /\
+(typ_exportdesc c (Export_table x) (Te_table t) <=> (has c.tables (w2n x) t)) /\
+(typ_exportdesc c (Export_mem x) (Te_mem t) <=> (has c.mems (w2n x) t)) /\
+(typ_exportdesc c (Export_global x) (Te_global t) <=> (has c.globals (w2n x) t /\ ~is_var t))
 `
 
-(* 3.4.10  Modules *)
-(* val module_typ_def = Define ` *)
-(* module_typ ml *)
+val guess_typ_exportdesc_def = Define `
+(guess_typ_exportdesc (m:module) (Export_func x) = (Te_func (EL (w2n x) m.types))) /\
+(guess_typ_exportdesc (m:module) (Export_table x) = (Te_table (EL (w2n x) m.tables).type)) /\
+(guess_typ_exportdesc (m:module) (Export_mem x) = (Te_mem (EL (w2n x) m.mems).type)) /\
+(guess_typ_exportdesc (m:module) (Export_global x) = (Te_global (EL (w2n x) m.globals).type))
+`
 
-(* LENGTH c.tables <= 1 *)
-(* LENGTH c.mems <= 1 *)
-(*                      ets = *)
-(* ets' =  *)
-(* ` *)
+(* 3.4.8.1 *)
+val typ_export_def = Define `typ_export c e t = typ_exportdesc c e.desc t`
+val guess_typ_export_def = Define `guess_typ_export m e = guess_typ_exportdesc m e.desc`
+
+(* 3.4.9.2 - 3.4.9.5 *)
+val typ_importdesc_def = Define `
+(typ_importdesc c (Import_func x) (Te_func t) <=> (has c.types (w2n x) t)) /\
+(typ_importdesc c (Import_table t) ty <=> (tabletype_ok t /\ ty = Te_table t)) /\
+(typ_importdesc c (Import_mem t) ty <=> (memtype_ok t /\ ty = Te_mem t)) /\
+(typ_importdesc c (Import_global t) ty <=> (globaltype_ok t /\ ~is_var t /\ ty = Te_global t))
+`
+
+val guess_typ_importdesc = Define `
+(guess_typ_importdesc m (Import_func x) = Te_func (EL (w2n x) (m:module).types)) /\
+(guess_typ_importdesc m (Import_table t) = Te_table t) /\
+(guess_typ_importdesc m (Import_mem t) = Te_mem t) /\
+(guess_typ_importdesc m (Import_global t) = Te_global t)
+`
+
+(* 3.4.9.1 *)
+val typ_import_def = Define `typ_import c i t = typ_importdesc c i.desc t`
+val guess_typ_import_def = Define `guess_typ_import m i = guess_typ_importdesc m i.desc`
+
+(* 3.4.10  Modules *)
+val guess_typ_module_imports_def = Define `guess_typ_module_imports m = MAP (guess_typ_import m) m.imports`
+val guess_typ_module_exports_def = Define `guess_typ_module_exports m = MAP (guess_typ_export m) m.exports`
+
+val module_context_def = Define `
+module_context m = let its = guess_typ_module_imports m in
+  <| types   := m.types
+   ; funcs   := (ext_funcs   its) ++ m.types
+   ; tables  := (ext_tables  its) ++ (MAP (\x. x.type) m.tables)
+   ; mems    := (ext_mems    its) ++ (MAP (\x. x.type) m.mems)
+   ; globals := (ext_globals its) ++ (MAP (\x. x.type) m.globals)
+   ; locals := []
+   ; labels := []
+   ; return := NONE
+   |>`
+
+val typ_module_def = Define `
+typ_module m its ets = (
+let
+  its = guess_typ_module_imports m;
+  ets = guess_typ_module_exports m;
+  c = module_context m;
+  c' =
+     <| types := []
+      ; funcs := []
+      ; tables := []
+      ; mems := []
+      ; globals := (ext_globals its)
+      ; locals := []
+      ; labels := []
+      ; return := NONE
+      |>
+in
+  (EVERY functype_ok m.types) /\
+  (EVERY (\x. ?t. typ_func c x t) m.funcs) /\
+  (EVERY (\x. ?t. typ_table x t) m.tables) /\
+  (EVERY (\x. ?t. typ_mem x t) m.mems) /\
+  (EVERY (\x. ?t. typ_global c' x t) m.globals) /\
+  (EVERY (\x. elem_ok c x) m.elem) /\
+  (EVERY (\x. data_ok c x) m.data) /\
+  ((OPTION_MAP (start_ok c) m.start) <> SOME F) /\
+  (LENGTH c.tables <= 1) /\
+  (LENGTH c.mems <= 1) /\
+  (ALL_DISTINCT (MAP (\ (e:export). e.name) m.exports))
+)`
