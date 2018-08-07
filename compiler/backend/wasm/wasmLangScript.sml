@@ -59,6 +59,7 @@ val _ = type_abbrev("name", ``:(codepoint list)``)
 (* https://www.w3.org/TR/2018/WD-wasm-core-1-20180215/#value-types%E2%91%A0 *)
 val _ = Datatype `valtype = T_i32 | T_i64 | T_f32 | T_f64`
 
+(* 2.3.1.1  Conventions *)
 val bit_width_def = Define
   `bit_width t = case t of T_i32 => 32n
                          | T_i64 => 64n
@@ -67,22 +68,14 @@ val bit_width_def = Define
 
 val _ = Datatype `tp = Tp_i8 | Tp_i16 | Tp_i32`
 
-val bit_width_p_def = Define
-  `bit_width_p t = case t of Tp_i8  =>  8n
-                           | Tp_i16 => 16n
-                           | Tp_i32 => 32n`
+val bit_width_p_def = Define `
+  bit_width_p Tp_i8 = 8n /\ bit_width_p Tp_i16 = 16n /\ bit_width_p Tp_i32 = 32n`
 
-val is_int_t_def = Define
-  `is_int_t t = case t of T_i32 => T
-                        | T_i64 => T
-                        | T_f32 => F
-                        | T_f64 => F`
+val is_int_t_def = Define `
+  is_int_t t <=> t = T_i32 \/ t = T_i64`
 
-val is_float_t_def = Define
-  `is_float_t t = case t of T_i32 => F
-                          | T_i64 => F
-                          | T_f32 => T
-                          | T_f64 => T`
+val is_float_t_def = Define `
+  is_float_t t <=> t = T_f32 \/ t = T_f64`
 
 val int_float_disjoint = store_thm(
  "int_float_disjoint",
@@ -119,8 +112,7 @@ val _ = Datatype `tabletype = T_table limits elemtype`
 val _ = Datatype `mut = T_const | T_var`
 val _ = Datatype `globaltype = T_global mut valtype`
 
-val is_var_def = Define
-`is_var gt = case gt of T_global T_var _ => T | _ => F`
+val is_var_def = Define `is_var gt = case gt of T_global T_var _ => T | _ => F`
 
 (* 2.3.8  External Types *)
 val _ = Datatype `externtype =
@@ -128,6 +120,12 @@ val _ = Datatype `externtype =
       | Te_table tabletype
       | Te_mem memtype
       | Te_global globaltype`
+
+(* 2.3.8.1  Conventions *)
+val _ = Define `ext_funcs = FOLDR (\x l. case x of Te_func y => y::l | _ => l) []`
+val _ = Define `ext_tables = FOLDR (\x l. case x of Te_table y => y::l | _ => l) []`
+val _ = Define `ext_mems = FOLDR (\x l. case x of Te_mem y => y::l | _ => l) []`
+val _ = Define `ext_globals = FOLDR (\x l. case x of Te_global y => y::l | _ => l) []`
 
 (* 2.4  Instructions *)
 (* https://www.w3.org/TR/2018/WD-wasm-core-1-20180215/#numeric-instructions%E2%91%A0 *)
@@ -171,7 +169,7 @@ val _ = type_abbrev("localidx", ``:word32``)
 val _ = type_abbrev("labelidx", ``:word32``)
 
 (* 4.2.1  Values *)
-(* Moved up since frame depends on v. *)
+(* Moved up since frame depends on val. *)
 val _ = Datatype `val = ConstInt32 i32 | ConstInt64 i64 | ConstFloat32 f32 | ConstFloat64 f64`
 
 (* 4.2.4  Addresses *)
@@ -257,12 +255,6 @@ val _ = Datatype `instr =
   | Init_data memaddr u32 (byte list)
   | Label num (instr list) (instr list)
   | Frame num frame (instr list)`
-
-(* 2.4.1.1  Conventions
-val _ = Datatype `unop = iunop + funop`
-val _ = Datatype `binop = ibinop + fbinop`
-val _ = Datatype `relop = irelop + frelop`
- TODO: cvtop *)
 
 (* NOTE: ctz = count trailing zeros, clz = count leading zeros, popcnt = count 1s *)
 val _ = Define
@@ -353,9 +345,8 @@ val _ = Datatype `expr = Expr (instr list)`
 
 (* 2.5  Modules *)
 (* The definition of module is at the end of the section. *)
-
 (* 2.5.1  Indices [moved-up] *)
-
+(* 2.5.2  Types [empty] *)
 (* 2.5.3  Functions *)
 val _ = Datatype `func = <| type: typeidx; locals: valtype vec; body: expr |>`
 
