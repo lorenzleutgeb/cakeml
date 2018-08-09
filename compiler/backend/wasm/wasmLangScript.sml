@@ -160,30 +160,38 @@ val _ = Datatype `memarg = <| offset: word32; align: word32 |>`
 
 (* 2.5.1  Indices *)
 (* Moved up since instr depends on indices. *)
-val _ = type_abbrev("typeidx", ``:word32``)
-val _ = type_abbrev("funcidx", ``:word32``)
-val _ = type_abbrev("tableidx", ``:word32``)
-val _ = type_abbrev("memidx", ``:word32``)
+val _ = type_abbrev(  "typeidx", ``:word32``)
+val _ = type_abbrev(  "funcidx", ``:word32``)
+val _ = type_abbrev( "tableidx", ``:word32``)
+val _ = type_abbrev(   "memidx", ``:word32``)
 val _ = type_abbrev("globalidx", ``:word32``)
-val _ = type_abbrev("localidx", ``:word32``)
-val _ = type_abbrev("labelidx", ``:word32``)
+val _ = type_abbrev( "localidx", ``:word32``)
+val _ = type_abbrev( "labelidx", ``:word32``)
 
 (* 4.2.1  Values *)
 (* Moved up since frame depends on val. *)
-val _ = Datatype `val = ConstInt32 i32 | ConstInt64 i64 | ConstFloat32 f32 | ConstFloat64 f64`
+val _ = Datatype `val = V_i32 i32 | V_i64 i64 | V_f32 f32 | V_f64 f64`
+
+val typeof_def = Define `
+(! x . typeof (V_i32 x) = T_i32) /\
+(! x . typeof (V_i64 x) = T_i64) /\
+(! x . typeof (V_f32 x) = T_f32) /\
+(! x . typeof (V_f64 x) = T_f64)`
 
 (* 4.2.4  Addresses *)
 (* https://www.w3.org/TR/2018/WD-wasm-core-1-20180215/#addresses%E2%91%A0 *)
 (* Moved up since externval needs addrs. *)
-val _ = type_abbrev("addr", ``:num``)
-val _ = type_abbrev("funcaddr", ``:addr``)
-val _ = type_abbrev("tableaddr", ``:addr``)
-val _ = type_abbrev("memaddr", ``:addr``)
+val _ = type_abbrev(      "addr", ``:num``)
+val _ = type_abbrev(  "funcaddr", ``:addr``)
+val _ = type_abbrev( "tableaddr", ``:addr``)
+val _ = type_abbrev(   "memaddr", ``:addr``)
 val _ = type_abbrev("globaladdr", ``:addr``)
 
 (* 4.2.11  External Values *)
 (* Moved up since exportinst needs externval. *)
 val _ = Datatype `externval = Func funcaddr | Table tableaddr | Mem memaddr | Global globaladdr`
+
+(* TODO: 4.2.11.1  Conventions *)
 
 (* 4.2.10  Export Instances *)
 (* Moved up since moduleinst needs exportinst. *)
@@ -192,18 +200,18 @@ val _ = Datatype `exportinst = <| name: name; value: externval |>`
 (* 4.2.5  Module Instances *)
 (* https://www.w3.org/TR/2018/WD-wasm-core-1-20180215/#module-instances%E2%91%A0 *)
 (* Moved up since funcinst needs moduleinst. *)
-val _ = Datatype `moduleinst = <|
-  types:       functype   list;
-  funcaddrs:   funcaddr   list;
-  tableaddrs:  tableaddr  list;
-  memaddrs:    memaddr    list;
-  globaladdrs: globaladdr list;
-  exports:     exportinst list
-|>`
+val _ = Datatype `moduleinst =
+  <| types:       functype   list
+   ; funcaddrs:   funcaddr   list
+   ; tableaddrs:  tableaddr  list
+   ; memaddrs:    memaddr    list
+   ; globaladdrs: globaladdr list
+   ; exports:     exportinst list
+   |>`
 
 (* 4.2.12.3  Frames *)
 (* Moved up since instr depends on frame. *)
-val _ = Datatype `frame = <| locals: val list; module: moduleinst |>`
+  val _ = Datatype `frame = <| locals: val list; module: moduleinst |>`
 
 val _ = Datatype `instr =
 (* 2.4.1  Numeric Instructions *)
@@ -256,89 +264,7 @@ val _ = Datatype `instr =
   | Label num (instr list) (instr list)
   | Frame num frame (instr list)`
 
-(* NOTE: ctz = count trailing zeros, clz = count leading zeros, popcnt = count 1s *)
-val _ = Define
-  `app_unop_i iop c =
-     (case iop of
-     Ctz => 0w
-   | Clz => 0w
-   | Popcnt => 0w)`
-
-(* NOTE: flags are ignored, as hinted in
- *       https://webassembly.github.io/spec/core/exec/numerics.html#floating-point-operations
- *)
-val _ = Define
-  `app_unop_f fop c =
-                  (case fop of
-                    Neg => float_negate c
-                  | Abs => float_abs c
-                  | Ceil => round roundTowardPositive (float_to_real c)
-                  | Floor => round roundTowardNegative (float_to_real c)
-                  | Trunc => round roundTowardZero (float_to_real c)
-                  | Nearest => round roundTiesToEven (float_to_real c)
-                  | Sqrt => SND (float_sqrt roundTiesToEven c))`
-
-val _ = Define
-  `app_binop_i iop c1 c2 = (case iop of
-                              Add => word_add c1 c2
-                            | Sub => word_sub c1 c2
-                            | Mul => word_mul c1 c2
-                            | Div U => word_div c1 c2
-                            | Div S => word_sdiv c1 c2
-                            | Rem U => word_mod c1 c2
-                            | Rem S => word_smod c1 c2
-                            | And => word_and c1 c2
-                            | Or => word_or c1 c2
-                            | Xor => word_xor c1 c2
-                            | Shl => word_lsl c1 (w2n c2)
-                            | Shr U => word_lsr c1 (w2n c2)
-                            | Shr S => word_asr c1 (w2n c2)
-                            | Rotl => word_rol c1 (w2n c2)
-                            | Rotr => word_ror c1 (w2n c2))`
-
-val _ = Define
-  `app_binop_f fop c1 c2 = (case fop of
-                              Addf => SOME (SND (float_add roundTiesToEven c1 c2))
-                            | Subf => SOME (SND (float_sub roundTiesToEven c1 c2))
-                            | Mulf => SOME (SND (float_mul roundTiesToEven c1 c2))
-                            | Divf => SOME (SND (float_div roundTiesToEven c1 c2))
-                            | Min => SOME (if float_greater_equal c1 c2 then c2 else c1)
-                            | Max => SOME (if float_greater_equal c1 c2 then c1 else c2)
-                            | Copysign => SOME (if c1.Sign = c2.Sign then c1 else (float_negate c1)))`
-
-val _ = Define
-`app_testop_i testop c = (case testop of Eqz => w2n c = 0)`
-
-val _ = Define
-  `app_relop_i rop c1 c2 = (case rop of
-                              Eq => c1 = c2
-                            | Ne => c1 <> c2
-                            | Lt U => word_lt c1 c2
-                            | Lt S => w2i c1 < w2i c2
-                            | Gt U => word_gt c1 c2
-                            | Gt S => w2i c1 > w2i c2
-                            | Le U => word_le c1 c2
-                            | Le S => w2i c1 <= w2i c2
-                            | Ge U => word_ge c1 c2
-                            | Ge S => w2i c1 >= w2i c2)`
-
-val _ = Define
-  `app_relop_f rop c1 c2 = (case rop of
-                              Eqf => float_equal c1 c2
-                            | Nef => ~float_equal c1 c2
-                            | Ltf => float_less_than c1 c2
-                            | Gtf => float_greater_than c1 c2
-                            | Lef => float_less_equal c1 c2
-                            | Gef => float_greater_equal c1 c2)`
-
-val typeof_def = Define `
-  typeof v = case v of ConstInt32   _ => T_i32
-                     | ConstInt64   _ => T_i64
-                     | ConstFloat32 _ => T_f32
-                     | ConstFloat64 _ => T_f64
-`
-
-val types_agree_def = Define `types_agree t v = (typeof v = t)`
+val is_const_def = Define `is_const (Const v) = T`
 
 (* 2.4.6  Expressions *)
 val _ = Datatype `expr = Expr (instr list)`
@@ -386,17 +312,17 @@ val _ = Datatype `importdesc =
 
 val _ = Datatype `import = <| module: name; name: name; desc: importdesc |>`
 
-val _ = Datatype `module = <|
-  types:   functype vec;
-  funcs:   func     vec;
-  tables:  table    vec;
-  mems:    mem      vec;
-  globals: global   vec;
-  elem:    elem     vec;
-  data:    data     vec;
-  start:   start    option;
-  imports: import   vec;
-  exports: export   vec
-|>`
+val _ = Datatype `module =
+  <| types:   functype vec
+   ; funcs:   func     vec
+   ; tables:  table    vec
+   ; mems:    mem      vec
+   ; globals: global   vec
+   ; elem:    elem     vec
+   ; data:    data     vec
+   ; start:   start    option
+   ; imports: import   vec
+   ; exports: export   vec
+   |>`
 
 val _ = export_theory()
