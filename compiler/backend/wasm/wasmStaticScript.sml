@@ -4,24 +4,22 @@ open HolKernel boolLib Parse bossLib wordsTheory binary_ieeeTheory integer_wordL
 
 val _ = ParseExtras.tight_equality()
 
-val _ = new_theory "wasmStatic";
+val _ = new_theory "wasmStatic"
 
 (* 3  Validation *)
 (* 3.1.1  Contexts *)
-(* https://www.w3.org/TR/2018/WD-wasm-core-1-20180215/#contexts%E2%91%A0 *)
-val _ = Datatype `context = <|
-  types:   functype   list;
-  funcs:   functype   list;
-  tables:  tabletype  list;
-  mems:    memtype    list;
-  globals: globaltype list;
-  locals:  valtype    list;
-  labels:  resulttype list;
-  return:  resulttype option
-|>`
+val _ = Datatype `context =
+  <| types:   functype   list
+   ; funcs:   functype   list
+   ; tables:  tabletype  list
+   ; mems:    memtype    list
+   ; globals: globaltype list
+   ; locals:  valtype    list
+   ; labels:  resulttype list
+   ; return:  resulttype option
+   |>`
 
 (* 3.2  Types *)
-(* Following operator shall correspond to the typing rule operator. *)
 val _ = add_rule {
   fixity      = Infix(NONASSOC, 450),
   pp_elements = [
@@ -73,18 +71,18 @@ val globaltype_ok_def = Define `globaltype_ok g = T`
 (* 3.3  Instructions *)
 
 (* Shorthands for common function types. *)
-val endofunc_def = Define `endofunc t = t _> t`
-val consumes_def = Define `consumes t = t _> []`
-val produces_def = Define `produces t = [] _> t`
+val endofunc_def = Define `endofunc = W Tf`
+val consumes_def = Define `consumes t = Tf t []` (* C combinator not found? *)
+val produces_def = Define `produces = Tf []`
 
 (* Helper mostly used to check something is defined correctly in the context. *)
-val has_def = Define `has xs i x = ((i < (LENGTH xs)) /\ ((EL i xs) = x))`
+val has_def = Define `has xs i x = (i < (LENGTH xs) /\ EL i xs = x)`
 
 (* Helper that takes a context and prepends a label to its labels. *)
 val labelled_def = Define `labelled c l = (c with labels := (l :: c.labels))`
 
 (* Helper to check well-formedness of Memory Instructions. *)
-val align_ok_def = Define `align_ok ma n =  ((2 EXP (w2n ma.align)) <= (n DIV 8))`
+val align_ok_def = Define `align_ok ma n = (2 EXP (w2n ma.align) <= n DIV 8)`
 
 (* Helper to check whether a context has some defined memory. *)
 val hasmem_def = Define `hasmem c = (c.mems <> [])`
@@ -227,9 +225,9 @@ module_context m = let its = guess_typ_module_imports m in
    ; tables  := (ext_tables  its) ++ (MAP (\x. x.type) m.tables)
    ; mems    := (ext_mems    its) ++ (MAP (\x. x.type) m.mems)
    ; globals := (ext_globals its) ++ (MAP (\x. x.type) m.globals)
-   ; locals := []
-   ; labels := []
-   ; return := NONE
+   ; locals  := []
+   ; labels  := []
+   ; return  := NONE
    |>`
 
 val typ_module_def = Define `
@@ -239,14 +237,14 @@ let
   ets = guess_typ_module_exports m;
   c = module_context m;
   c' =
-     <| types := []
-      ; funcs := []
-      ; tables := []
-      ; mems := []
+     <| types   := []
+      ; funcs   := []
+      ; tables  := []
+      ; mems    := []
       ; globals := (ext_globals its)
-      ; locals := []
-      ; labels := []
-      ; return := NONE
+      ; locals  := []
+      ; labels  := []
+      ; return  := NONE
       |>
 in
   (EVERY functype_ok m.types) /\
@@ -261,3 +259,5 @@ in
   (LENGTH c.mems <= 1) /\
   (ALL_DISTINCT (MAP (\ (e:export). e.name) m.exports))
 )`
+
+val _ = export_theory ()
