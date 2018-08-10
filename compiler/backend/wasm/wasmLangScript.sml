@@ -4,7 +4,7 @@ open HolKernel boolLib Parse bossLib wordsTheory binary_ieeeTheory integer_wordL
 
 val _ = ParseExtras.tight_equality()
 
-val _ = new_theory "wasmLang";
+val _ = new_theory "wasmLang"
 
 val _ = Datatype `ne_list = Base 'a | Conz 'a ne_list`
 
@@ -115,11 +115,12 @@ val _ = Datatype `globaltype = T_global mut valtype`
 val is_var_def = Define `is_var gt = case gt of T_global T_var _ => T | _ => F`
 
 (* 2.3.8  External Types *)
-val _ = Datatype `externtype =
-        Te_func functype
-      | Te_table tabletype
-      | Te_mem memtype
-      | Te_global globaltype`
+val _ = Datatype `
+  externtype =
+    | Te_func     functype
+    | Te_table   tabletype
+    | Te_mem       memtype
+    | Te_global globaltype`
 
 (* 2.3.8.1  Conventions *)
 val _ = Define `ext_funcs = FOLDR (\x l. case x of Te_func y => y::l | _ => l) []`
@@ -128,33 +129,36 @@ val _ = Define `ext_mems = FOLDR (\x l. case x of Te_mem y => y::l | _ => l) []`
 val _ = Define `ext_globals = FOLDR (\x l. case x of Te_global y => y::l | _ => l) []`
 
 (* 2.4  Instructions *)
-(* https://www.w3.org/TR/2018/WD-wasm-core-1-20180215/#numeric-instructions%E2%91%A0 *)
-val _ = Datatype
-  `sx = S | U`
+val _ = Datatype `sx = S | U`
 
-val _ = Datatype
-  `iunop = Clz | Ctz | Popcnt`
+val _ = Datatype `iunop = Clz | Ctz | Popcnt`
 
-val _ = Datatype
-  `ibinop = Add | Sub | Mul | Div sx | Rem sx | And | Or | Not | Shl | Shr sx | Rotl | Rotr`
+val _ = Datatype `
+  ibinop =
+    | Add
+    | Sub
+    | Mul
+    | Div sx
+    | Rem sx
+    | And
+    | Or
+    | Not
+    | Shl
+    | Shr sx
+    | Rotl
+    | Rotr`
 
-val _ = Datatype
-  `funop = Neg | Abs | Ceil | Floor | Trunc | Nearest | Sqrt`
+val _ = Datatype `funop = Neg | Abs | Ceil | Floor | Trunc | Nearest | Sqrt`
 
-val _ = Datatype
-  `fbinop = Addf | Subf | Mulf | Divf | Min | Max | Copysign`
+val _ = Datatype `fbinop = Addf | Subf | Mulf | Divf | Min | Max | Copysign`
 
-val _ = Datatype
-  `itestop = Eqz`
+val _ = Datatype `itestop = Eqz`
 
-val _ = Datatype
-  `irelop = Eq | Ne | Lt sx | Gt sx | Le sx | Ge sx`
+val _ = Datatype `irelop = Eq | Ne | Lt sx | Gt sx | Le sx | Ge sx`
 
-val _ = Datatype
-  `frelop = Eqf | Nef | Ltf | Gtf | Lef | Gef`
+val _ = Datatype `frelop = Eqf | Nef | Ltf | Gtf | Lef | Gef`
 
-val _ = Datatype
-  `cvtop = Convert | Reinterpret`
+val _ = Datatype `cvtop = Convert | Reinterpret`
 
 val _ = Datatype `memarg = <| offset: word32; align: word32 |>`
 
@@ -189,7 +193,12 @@ val _ = type_abbrev("globaladdr", ``:addr``)
 
 (* 4.2.11  External Values *)
 (* Moved up since exportinst needs externval. *)
-val _ = Datatype `externval = Func funcaddr | Table tableaddr | Mem memaddr | Global globaladdr`
+val _ = Datatype `
+  externval =
+    | Func     funcaddr
+    | Table   tableaddr
+    | Mem       memaddr
+    | Global globaladdr`
 
 (* TODO: 4.2.11.1  Conventions *)
 
@@ -198,73 +207,69 @@ val _ = Datatype `externval = Func funcaddr | Table tableaddr | Mem memaddr | Gl
 val _ = Datatype `exportinst = <| name: name; value: externval |>`
 
 (* 4.2.5  Module Instances *)
-(* https://www.w3.org/TR/2018/WD-wasm-core-1-20180215/#module-instances%E2%91%A0 *)
 (* Moved up since funcinst needs moduleinst. *)
 val _ = Datatype `moduleinst =
-  <| types:       functype   list
-   ; funcaddrs:   funcaddr   list
-   ; tableaddrs:  tableaddr  list
-   ; memaddrs:    memaddr    list
+  <| types      :   functype list
+   ; funcaddrs  :   funcaddr list
+   ; tableaddrs :  tableaddr list
+   ; memaddrs   :    memaddr list
    ; globaladdrs: globaladdr list
-   ; exports:     exportinst list
+   ; exports    : exportinst list
    |>`
 
 (* 4.2.12.3  Frames *)
 (* Moved up since instr depends on frame. *)
-  val _ = Datatype `frame = <| locals: val list; module: moduleinst |>`
+val _ = Datatype `frame = <| locals: val list; module: moduleinst |>`
 
-val _ = Datatype `instr =
+val _ = Datatype `
+  instr =
 (* 2.4.1  Numeric Instructions *)
-    Const val
-  | Unop_i valtype iunop
-  | Unop_f valtype funop
-  | Binop_i valtype ibinop
-  | Binop_f valtype fbinop
-  | Testop_i valtype itestop
-  | Relop_i valtype irelop
-  | Relop_f valtype frelop
-  | Cvtop valtype cvtop valtype (sx option)
-
+    | Const val
+    | Unop_i   valtype   iunop
+    | Unop_f   valtype   funop
+    | Binop_i  valtype  ibinop
+    | Binop_f  valtype  fbinop
+    | Testop_i valtype itestop
+    | Relop_i  valtype  irelop
+    | Relop_f  valtype  frelop
+    | Cvtop    valtype   cvtop valtype (sx option)
 (* 2.4.2  Parametric Instructions *)
-  | Drop
-  | Select
-
+    | Drop
+    | Select
 (* 2.4.3  Variable Instructions *)
-  | Get_local localidx
-  | Set_local localidx
-  | Tee_local localidx
-  | Get_global globalidx
-  | Set_global globalidx
-
+    | Get_local   localidx
+    | Set_local   localidx
+    | Tee_local   localidx
+    | Get_global globalidx
+    | Set_global globalidx
 (* 2.4.4  Memory Instructions *)
-  | Load valtype ((tp # sx) option) memarg
-  | Store valtype (tp option) memarg
-  | Current_memory
-  | Grow_memory
-
+    | Load valtype  ((tp # sx) option) memarg
+    | Store valtype ( tp       option) memarg
+    | Current_memory
+    | Grow_memory
 (* 2.4.5  Control Instructions *)
-  | Unreachable
-  | Nop
-  | Block resulttype (instr list)
-  | Loop resulttype (instr list)
-  | If resulttype (instr list) (instr list)
-  | Br labelidx
-  | Br_if labelidx
+    | Unreachable
+    | Nop
+    | Block resulttype (instr list)
+    | Loop  resulttype (instr list)
+    | If    resulttype (instr list) (instr list)
+    | Br    labelidx
+    | Br_if labelidx
     (* TODO: labelidx vec should be nonempty! *)
-  | Br_table (labelidx vec) labelidx
-  | Return
-  | Call funcidx
-  | Call_indirect typeidx
-
+    | Br_table (labelidx vec) labelidx
+    | Return
+    | Call funcidx
+    | Call_indirect typeidx
 (* 4.2.13  Administrative Instructions *)
-  | Trap
-  | Invoke funcaddr
-  | Init_elem tableaddr u32 (funcidx list)
-  | Init_data memaddr u32 (byte list)
-  | Label num (instr list) (instr list)
-  | Frame num frame (instr list)`
+    | Trap
+    | Invoke funcaddr
+    | Init_elem tableaddr u32 (funcidx list)
+    | Init_data memaddr u32 (byte list)
+    | Label num (instr list) (instr list)
+    | Frame num frame (instr list)`
 
-val is_const_def = Define `is_const (Const v) = T`
+(* To check whether an instr encodes a val. *)
+val is_val_def = Define `is_val (Const v) = T`
 
 (* 2.4.6  Expressions *)
 val _ = Datatype `expr = Expr (instr list)`
@@ -273,6 +278,7 @@ val _ = Datatype `expr = Expr (instr list)`
 (* The definition of module is at the end of the section. *)
 (* 2.5.1  Indices [moved-up] *)
 (* 2.5.2  Types [empty] *)
+
 (* 2.5.3  Functions *)
 val _ = Datatype `func = <| type: typeidx; locals: valtype vec; body: expr |>`
 
@@ -295,34 +301,36 @@ val _ = Datatype `data = <| data: memidx; offset: expr; init: byte vec |>`
 val _ = Datatype `start = <| func: funcidx |>`
 
 (* 2.5.10  Exports *)
-val _ = Datatype `exportdesc =
-        Export_func funcidx
-      | Export_table tableidx
-      | Export_mem memidx
-      | Export_global globalidx`
+val _ = Datatype `
+  exportdesc =
+    | Export_func     funcidx
+    | Export_table   tableidx
+    | Export_mem       memidx
+    | Export_global globalidx`
 
 val _ = Datatype `export = <| name: name; desc: exportdesc |>`
 
 (* 2.5.11  Imports *)
-val _ = Datatype `importdesc =
-        Import_func typeidx
-      | Import_table tabletype
-      | Import_mem memtype
-      | Import_global globaltype`
+val _ = Datatype `
+  importdesc =
+    | Import_func      typeidx
+    | Import_table   tabletype
+    | Import_mem       memtype
+    | Import_global globaltype`
 
 val _ = Datatype `import = <| module: name; name: name; desc: importdesc |>`
 
 val _ = Datatype `module =
-  <| types:   functype vec
-   ; funcs:   func     vec
-   ; tables:  table    vec
-   ; mems:    mem      vec
+  <| types  : functype vec
+   ; funcs  : func     vec
+   ; tables : table    vec
+   ; mems   : mem      vec
    ; globals: global   vec
-   ; elem:    elem     vec
-   ; data:    data     vec
-   ; start:   start    option
+   ; elem   : elem     vec
+   ; data   : data     vec
+   ; start  : start    option
    ; imports: import   vec
    ; exports: export   vec
    |>`
 
-val _ = export_theory()
+val _ = export_theory ()

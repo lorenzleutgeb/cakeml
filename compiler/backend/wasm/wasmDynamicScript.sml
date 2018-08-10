@@ -4,27 +4,24 @@ open HolKernel boolLib Parse bossLib wordsTheory binary_ieeeTheory integer_wordL
 
 val _ = ParseExtras.tight_equality()
 
-val _ = new_theory "wasmDynamic";
+val _ = new_theory "wasmDynamic"
 
 (* 4  Execution *)
 
 (* 4.2  Runtime Structure *)
 
-(* 4.2.1  Values [moved-up] *)
-
 (* 4.2.2  Results *)
-val _ = Datatype `result = Result (val list) | R_Trap`
+(* There is no necessity for a separate result type. *)
+(* val _ = Datatype `result = Result (val list) | R_Trap` *)
 
 (* 4.2.6  Function Instances *)
-(* https://www.w3.org/TR/2018/WD-wasm-core-1-20180215/#function-instances%E2%91%A0 *)
 (* Moved up since store needs funcinst. *)
-val _ = Datatype
-`funcinst = <| type: functype; module: moduleinst; code: func |>`
+val _ = Datatype `funcinst = <| type: functype; module: moduleinst; code: func |>`
 (* TODO: Host Functions *)
 
 (* 4.2.7  Table Instances *)
 (* Moved up since store needs tableinst. *)
-val _ = Datatype `funcelem = Funcelem (funcaddr option)`
+val _ = type_abbrev("funcelem", ``:(funcaddr option)``)
 val _ = Datatype `tableinst = <| elem: funcelem list; max: u32 |>`
 
 (* 4.2.8  Memory Instances *)
@@ -34,20 +31,16 @@ val _ = Define `page_size = 65536n`
 val _ = Define `bytes_to_pages x = x DIV page_size`
 
 (* 4.2.9  Global Instances *)
-(* https://www.w3.org/TR/2018/WD-wasm-core-1-20180215/#global-instances%E2%91%A0 *)
 (* Moved up since store needs globalinst. *)
 val _ = Datatype `globalinst = <| value: val; mut: mut |>`
 
 (* 4.2.3  Store *)
-val _ = Datatype `
-  store =
-    <| funcs: funcinst list
-     ; tables: tableinst list
-     ; mems: meminst list
-     ; globals: globalinst list
-     |>`
-
-val globalinst_is_var_def = Define `globalinst_is_var g = (g.mut = T_var)`
+val _ = Datatype `store =
+  <| funcs  :   funcinst list
+   ; tables :  tableinst list
+   ; mems   :    meminst list
+   ; globals: globalinst list
+   |>`
 
 (* 4.2.4  Adresses [moved to wasmLang] *)
 (* 4.2.5  Module Instances [moved to wasmLang] *)
@@ -59,7 +52,8 @@ val globalinst_is_var_def = Define `globalinst_is_var g = (g.mut = T_var)`
 (* 4.2.11  External Values [moved to wasmLang] *)
 
 (* 4.2.12.2  Labels *)
-val _ = Datatype `label = T_Label num (instr list)`
+(* There is no necessity for a separate label type. *)
+(* val _ = Datatype `label = T_Label num (instr list)` *)
 
 (* 4.2.12.3  Frames *)
 (* Definition of frame was moved to wasmLang. *)
@@ -69,16 +63,16 @@ val _ = Datatype `activation = Activation num frame`
 
 (* 4.2.13.1  Block Contexts *)
 (* Parameters of the constructors x are indicated as <x>. *)
-val _ = Datatype `block =
+val _ = Datatype `
+  block =
 (* B^0 ::= <val*> [_] <instr*> *)
-    B0 (val list) (instr list)
+    | B0 (val list) (instr list)
 (* B^(k+1) ::= <val*> label_<n> { <instr*> } B^k end <instr*> *)
-  | Bk (val list) num (instr list) block (instr list)`
+    | Bk (val list) num (instr list) block (instr list)`
 
 val fill_b_def = Define `
 fill_b 0n (B0 vs is)          filler = MAP Const vs ++ filler ++ is /\
-fill_b k  (Bk vs n i1s b i2s) filler = MAP Const vs ++ [Label n i1s (fill_b (k - 1n) b filler)] ++ i2s
-`
+fill_b k  (Bk vs n i1s b i2s) filler = MAP Const vs ++ [Label n i1s (fill_b (k - 1n) b filler)] ++ i2s`
 
 (* 4.2.13.2  Configurations *)
 val _ = Datatype `thread = Thread frame (instr list)`
@@ -93,19 +87,19 @@ val _ = type_abbrev("configuration", ``:(store # frame # (instr list))``)
 val mk_config_def = Define `mk_config (s, f, is) = Config s (Thread f is)`
 
 (* 4.2.13.3  Evaluation Context *)
-val _ = Datatype `e =
+val _ = Datatype `
+  e =
 (* [_] *)
-    E0
+    | E0
 (* <val*> <E> <instr*> *)
-  | Ex (val list) e (instr list)
+    | Ex (val list) e (instr list)
 (* label_<n> { <instr*> } <E> end *)
-  | Ey num (instr list) e`
+    | Ey num (instr list) e`
 
 val fill_e_def = Define `
 fill_e E0           filler = filler /\
 fill_e (Ex vs e is) filler = MAP Const vs ++ fill_e e filler ++ is /\
-fill_e (Ey n is e)  filler = [Label n is (fill_e e filler)]
-`
+fill_e (Ey n is e)  filler = [Label n is (fill_e e filler)]`
 
 (* 4.3  Numerics *)
 (* 4.3.2  Integer Operations *)
@@ -261,13 +255,17 @@ val _ = Define `
  * between the option check and construction a constant. Usually f will be
  * a constructor of val.
  *)
-val wrap_option_def = Define `wrap_option f (SOME x) = Const (f x) /\ wrap_option f NONE = Trap`
+val wrap_option_def = Define `
+wrap_option f (SOME x) = Const (f x) /\
+wrap_option f NONE     = Trap`
 
 (* Some functions that define the semantics of instructions return booleans.
  * In wasm, booleans are represented by the two constants i32.const 0 and
  * i32.const 1, which we get by applying this wrapping function.
  *)
-val wrap_bool_def = Define `wrap_bool T = Const (V_i32 1w) /\ wrap_bool F = Const (V_i32 0w)`
+val wrap_bool_def = Define `
+wrap_bool T = Const (V_i32 1w) /\
+wrap_bool F = Const (V_i32 0w)`
 
 (* Many steps operate only on the list of instructions
  * of the current thread. Since for these cases we do
@@ -276,97 +274,159 @@ val wrap_bool_def = Define `wrap_bool T = Const (V_i32 1w) /\ wrap_bool F = Cons
  * afterwards.
  *)
 
-(* Following operator shall correspond to the reduction rule operator. *)
 val _ = set_mapped_fixity {
-        fixity = Infix(NONASSOC, 450),
-        tok = "-s->",
-        term_name = "step_simple"
+  fixity    = Infix(NONASSOC, 450),
+  tok       = "-s->",
+  term_name = "step_simple"
 }
-
 val _ = set_mapped_fixity {
-        fixity = Infix(NONASSOC, 450),
-        tok = "↝",
-        term_name = "step_simple"
-    }
+  fixity    = Infix(NONASSOC, 450),
+  tok       = "↝",
+  term_name = "step_simple"
+}
 
 val (step_simple_rules, step_simple_cases, step_simple_ind) = Hol_reln `
 (* 4.2.13.3 *)
-(! e . (e <> E0) ==> fill_e e [Trap] -s-> [Trap]) /\
-(! n f . [Frame n f [Trap]] -s-> [Trap]) /\
+(!e. e <> E0 ==> fill_e e [Trap] -s-> [Trap]) /\
+(!n f. [Frame n f [Trap]] -s-> [Trap]) /\
 (* 4.4.1.2 *)
-(! op v c . (v = V_i32 c) ==> [Const v; (Unop_i (typeof v) op)] -s-> [Const (V_i32 (app_unop_i op c))]) /\
-(! op v c . (v = V_i64 c) ==> [Const v; (Unop_i (typeof v) op)] -s-> [Const (V_i64 (app_unop_i op c))]) /\
-(! op v c . (v = V_f32 c) ==> [Const v; (Unop_f (typeof v) op)] -s-> [Const (V_f32 (app_unop_f op c))]) /\
-(! op v c . (v = V_f64 c) ==> [Const v; (Unop_f (typeof v) op)] -s-> [Const (V_f64 (app_unop_f op c))]) /\
+(!op v c. v = V_i32 c ==>
+  [Const v; Unop_i (typeof v) op] -s-> [Const (V_i32 (app_unop_i op c))]
+) /\
+(!op v c. v = V_i64 c ==>
+  [Const v; Unop_i (typeof v) op] -s-> [Const (V_i64 (app_unop_i op c))]
+) /\
+(!op v c. v = V_f32 c ==>
+  [Const v; Unop_f (typeof v) op] -s-> [Const (V_f32 (app_unop_f op c))]
+) /\
+(!op v c. v = V_f64 c ==>
+  [Const v; Unop_f (typeof v) op] -s-> [Const (V_f64 (app_unop_f op c))]
+) /\
 (* 4.4.1.3 *)
-(! op v1 v2 c1 c2. (v1 = V_i32 c1 /\ v2 = V_i32 c2) ==> [Const v1; Const v2; Binop_i (typeof v1) op] -s-> [wrap_option V_i32 (app_binop_i op c1 c2)]) /\
-(! op v1 v2 c1 c2. (v1 = V_i64 c1 /\ v2 = V_i64 c2) ==> [Const v1; Const v2; Binop_i (typeof v1) op] -s-> [wrap_option V_i64 (app_binop_i op c1 c2)]) /\
-(! op v1 v2 c1 c2. (v1 = V_f32 c1 /\ v2 = V_f32 c2) ==> [Const v1; Const v2; Binop_f (typeof v1) op] -s-> [wrap_option V_f32 (app_binop_f op c1 c2)]) /\
-(! op v1 v2 c1 c2. (v1 = V_f64 c1 /\ v2 = V_f64 c2) ==> [Const v1; Const v2; Binop_f (typeof v1) op] -s-> [wrap_option V_f64 (app_binop_f op c1 c2)]) /\
+(!op v1 v2 c1 c2. v1 = V_i32 c1 /\ v2 = V_i32 c2 ==>
+    [Const v1; Const v2; Binop_i (typeof v1) op]
+  -s->
+    [wrap_option V_i32 (app_binop_i op c1 c2)]
+) /\
+(!op v1 v2 c1 c2. v1 = V_i64 c1 /\ v2 = V_i64 c2 ==>
+    [Const v1; Const v2; Binop_i (typeof v1) op]
+  -s->
+    [wrap_option V_i64 (app_binop_i op c1 c2)]
+) /\
+(!op v1 v2 c1 c2. v1 = V_f32 c1 /\ v2 = V_f32 c2 ==>
+    [Const v1; Const v2; Binop_f (typeof v1) op]
+  -s->
+    [wrap_option V_f32 (app_binop_f op c1 c2)]
+) /\
+(!op v1 v2 c1 c2. v1 = V_f64 c1 /\ v2 = V_f64 c2 ==>
+    [Const v1; Const v2; Binop_f (typeof v1) op]
+  -s->
+    [wrap_option V_f64 (app_binop_f op c1 c2)]
+) /\
 (* 4.4.1.4 *)
-(! op v c . (v = V_i32 c) ==> [Const v; (Testop_i (typeof v) op)] -s-> [wrap_bool (app_testop_i op c)]) /\
-(! op v c . (v = V_i64 c) ==> [Const v; (Testop_i (typeof v) op)] -s-> [wrap_bool (app_testop_i op c)]) /\
+(!op v c. v = V_i32 c ==>
+  [Const v; (Testop_i (typeof v) op)] -s-> [wrap_bool (app_testop_i op c)]
+) /\
+(!op v c. v = V_i64 c ==>
+  [Const v; (Testop_i (typeof v) op)] -s-> [wrap_bool (app_testop_i op c)]
+) /\
 (* 4.4.1.5 *)
-(! op v1 v2 c1 c2. (v1 = V_i32 c1 /\ v2 = V_i32 c2) ==> [Const v1; Const v2; Relop_i (typeof v1) op] -s-> [wrap_bool (app_relop_i op c1 c2)]) /\
-(! op v1 v2 c1 c2. (v1 = V_i64 c1 /\ v2 = V_i64 c2) ==> [Const v1; Const v2; Relop_i (typeof v1) op] -s-> [wrap_bool (app_relop_i op c1 c2)]) /\
-(! op v1 v2 c1 c2. (v1 = V_f32 c1 /\ v2 = V_f32 c2) ==> [Const v1; Const v2; Relop_f (typeof v1) op] -s-> [wrap_bool (app_relop_f op c1 c2)]) /\
-(! op v1 v2 c1 c2. (v1 = V_f64 c1 /\ v2 = V_f64 c2) ==> [Const v1; Const v2; Relop_f (typeof v1) op] -s-> [wrap_bool (app_relop_f op c1 c2)]) /\
+(!op v1 v2 c1 c2. v1 = V_i32 c1 /\ v2 = V_i32 c2 ==>
+    [Const v1; Const v2; Relop_i (typeof v1) op]
+  -s->
+    [wrap_bool (app_relop_i op c1 c2)]
+) /\
+(!op v1 v2 c1 c2. v1 = V_i64 c1 /\ v2 = V_i64 c2 ==>
+    [Const v1; Const v2; Relop_i (typeof v1) op]
+  -s->
+    [wrap_bool (app_relop_i op c1 c2)]
+) /\
+(!op v1 v2 c1 c2. v1 = V_f32 c1 /\ v2 = V_f32 c2 ==>
+    [Const v1; Const v2; Relop_f (typeof v1) op]
+  -s->
+    [wrap_bool (app_relop_f op c1 c2)]
+) /\
+(!op v1 v2 c1 c2. v1 = V_f64 c1 /\ v2 = V_f64 c2 ==>
+    [Const v1; Const v2; Relop_f (typeof v1) op]
+  -s->
+    [wrap_bool (app_relop_f op c1 c2)]
+) /\
 (* 4.4.1.6 *)
-(! op v t2 sxo. [Const v; Cvtop t2 op (typeof v) sxo] -s-> [wrap_option (\x.x) (cvt t2 op v sxo)]) /\
+(!op v t2 sxo.
+  [Const v; Cvtop t2 op (typeof v) sxo] -s-> [wrap_option (\x.x) (cvt t2 op v sxo)]
+) /\
 (* 4.4.2.1 *)
-(! v . [Const v; Drop] -s-> []) /\
+(!v. [Const v; Drop] -s-> []) /\
 (* 4.4.2.2 *)
-(! v a b . [a; b; wrap_bool v; Select] -s-> [if v then a else b]) /\
+(!v a b. [a; b; wrap_bool v; Select] -s-> [if v then a else b]) /\
 (* 4.4.3.3 *)
-(! c x . [c; Tee_local x] -s-> [c; c; Set_local x]) /\
+(!c x. [c; Tee_local x] -s-> [c; c; Set_local x]) /\
 (* 4.4.5.1 *)
 [Nop] -s-> [] /\
 (* 4.4.5.2 *)
 [Unreachable] -s-> [Trap] /\
 (* 4.4.5.3 *)
-(! t is . [Block t is] -s-> [Label (LENGTH t) [] is]) /\
+(!t is. [Block t is] -s-> [Label (LENGTH t) [] is]) /\
 (* 4.4.5.4 *)
-(! t is . [Loop t is] -s-> [Label 0 [Loop t is] is]) /\
+(!t is. [Loop t is] -s-> [Label 0 [Loop t is] is]) /\
 (* 4.4.5.5 *)
-(! t i1s i2s v . [wrap_bool v; If t is1 is2] -s-> [Label (LENGTH t) [] (if v then i1s else i2s)]) /\
+(!t i1s i2s v.
+  [wrap_bool v; If t is1 is2] -s-> [Label (LENGTH t) [] (if v then i1s else i2s)]
+) /\
 (* 4.4.5.6 *)
-(! is l vs. EVERY is_const vs ==> [Label (LENGTH vs) is (fill_b l holed (vs ++ [Br (n2w l)]))] -s-> vs ++ is) /\
+(!is l vs. EVERY is_val vs ==>
+  [Label (LENGTH vs) is (fill_b l holed (vs ++ [Br (n2w l)]))] -s-> vs ++ is
+) /\
 (* 4.4.5.7 *)
-(! v l . [wrap_bool v; Br_if l] -s-> (if v then [Br l] else [])) /\
+(!v l.
+  [wrap_bool v; Br_if l] -s-> (if v then [Br l] else [])
+) /\
 (* 4.4.5.8 *)
-(! i ls ln . [Const (V_i32 (n2w i)); Br_table ls ln] -s-> [Br (if i < (LENGTH ls) then (EL i ls) else ln)]) /\
+(!i ls ln.
+    [Const (V_i32 (n2w i)); Br_table ls ln]
+  -s->
+    [Br (if i < (LENGTH ls) then (EL i ls) else ln)]
+) /\
 (* 4.4.6.2 *)
-(! n is vs . (EVERY is_const vs) ==> [Label n is vs] -s-> vs) /\
+(!n is vs. (EVERY is_val vs) ==> [Label n is vs] -s-> vs) /\
 (* TODO: Conrad Watt also defines the following case. Not sure if needed? *)
-(! n is . [Label n is [Trap]] -s-> [Trap])
+(!n is. [Label n is [Trap]] -s-> [Trap])
 `
 
-(* now, the steps that involve store and frame. *)
-val _ = set_mapped_fixity {fixity = Infix(NONASSOC, 450), tok = "--->", term_name = "step"}
-val _ = set_mapped_fixity {fixity = Infix(NONASSOC, 450), tok = "↪",    term_name = "step"}
+(* Now, the steps that involve store and/or frame. *)
+val _ = set_mapped_fixity {
+  fixity    = Infix(NONASSOC, 450),
+  tok       = "--->",
+  term_name = "step"
+}
+val _ = set_mapped_fixity {
+  fixity    = Infix(NONASSOC, 450),
+  tok       = "↪",
+  term_name = "step"
+}
 
 (* s (f is) *)
 val (step_rules, step_cases, step_ind) = Hol_reln `
 (* lift -s-> *)
-(! s f is is' . (is -s-> is') ==> (s, f, is) ---> (s, f, is')) /\
+(!s f is is'. (is -s-> is') ==> (s, f, is) ---> (s, f, is')) /\
 (* 4.2.13.3 *)
-(! s f' f'' n . (s, f', is) ---> (s', f'', is') ==> (s, f, [Frame n f' is]) ---> (s', f, [Frame n f'' is'])) /\
+(!s f' f'' n. (s, f', is) ---> (s', f'', is') ==> (s, f, [Frame n f' is]) ---> (s', f, [Frame n f'' is'])) /\
 (* 4.4.3.1 *)
-(! s f x . (s, f, [Get_local (n2w x)]) ---> (s, f, [Const (EL x f.locals)])) /\
+(!s f x. (s, f, [Get_local (n2w x)]) ---> (s, f, [Const (EL x f.locals)])) /\
 (* 4.4.3.2 *)
-(! s f x v . (s, f, [Const v; Set_local (n2w x)]) ---> (s, (f with locals := LUPDATE v x f.locals), [])) /\
+(!s f x v. (s, f, [Const v; Set_local (n2w x)]) ---> (s, (f with locals := LUPDATE v x f.locals), [])) /\
 (* 4.4.3.4 *)
-(! s f x . (s, f, [Get_global (n2w x)]) ---> (s, f, [Const (EL (EL x f.module.globaladdrs) s.globals).value])) /\
+(!s f x. (s, f, [Get_global (n2w x)]) ---> (s, f, [Const (EL (EL x f.module.globaladdrs) s.globals).value])) /\
 (* 4.4.3.5 *)
 (* 4.4.4.1 *)
-(! s f . (a = HD f.module.memaddrs /\ m = (EL a s.mems) /\ ea = word_add i ma.offset /\ n = bit_width t /\ (w2n ea) + (n DIV 8) <= (LENGTH m.data) /\ bs = m ) ==> (s, f, [Const (V_i32 i); Load t NONE ma]) ---> (s, f, [mk t bs])) /\
+(!s f. (a = HD f.module.memaddrs /\ m = (EL a s.mems) /\ ea = word_add i ma.offset /\ n = bit_width t /\ (w2n ea) + (n DIV 8) <= (LENGTH m.data) /\ bs = m ) ==> (s, f, [Const (V_i32 i); Load t NONE ma]) ---> (s, f, [mk t bs])) /\
 (* 4.4.4.2 *)
 (* 4.4.4.3 *)
-(! s f . (s, f, [Current_memory]) ---> (s, f, [Const (V_i32 (n2w (bytes_to_pages (LENGTH (EL (HD f.module.memaddrs) s.mems).data))))])) /\
+(!s f. (s, f, [Current_memory]) ---> (s, f, [Const (V_i32 (n2w (bytes_to_pages (LENGTH (EL (HD f.module.memaddrs) s.mems).data))))])) /\
 (* 4.4.5.9 *)
-(! s f vs n k . (n = LENGTH vs) ==> (s, f, [Frame n f (fill_b b k (vs ++ [Return]))]) ---> (s, f, vs)) /\
+(!s f vs n k. (n = LENGTH vs) ==> (s, f, [Frame n f (fill_b b k (vs ++ [Return]))]) ---> (s, f, vs)) /\
 (* 4.4.5.10 *)
-(! s f x . (s, f, [Call (n2w x)]) ---> (s, f, [Invoke (EL x f.module.funcaddrs)]))
+(!s f x. (s, f, [Call (n2w x)]) ---> (s, f, [Invoke (EL x f.module.funcaddrs)]))
 (* 4.4.5.11 *)
 (* 4.4.7.1 *)
 (* 4.4.7.2 *)
@@ -375,13 +435,14 @@ val (step_rules, step_cases, step_ind) = Hol_reln `
 
 (* Reduction of expressions are treated separately. *)
 val _ = set_mapped_fixity {
-        fixity = Infix(NONASSOC, 450),
-        tok = "-e->",
-        term_name = "step_expr"
-    }
+  fixity    = Infix(NONASSOC, 450),
+  tok       = "-e->",
+  term_name = "step_expr"
+}
 
 val _ = Hol_reln `
-(! s f is s' f' is' . (s, f, is) ---> (s', f', is') ==> (s, f, Expr is) -e-> (s', f', Expr is'))
-`
+(!s f is s' f' is'. (s, f, is) ---> (s', f', is') ==>
+  (s, f, Expr is) -e-> (s', f', Expr is')
+)`
 
-val _ = export_theory();
+val _ = export_theory ()
