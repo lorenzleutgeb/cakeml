@@ -60,6 +60,8 @@ val _ = Datatype `
 (* <| type: functype; hostcode hostfunc |> *)
     | Host   functype hostfunc`
 
+val funcinst_type_def = Define `funcinst_type (Native tf mi f) = tf /\ funcinst_type (Host tf hf) = tf`
+
 (* 4.2.7  Table Instances *)
 (* Moved up since store needs tableinst. *)
 val _ = type_abbrev("funcelem", ``:(funcaddr option)``)
@@ -463,6 +465,8 @@ val _ = set_mapped_fixity {
   term_name = "step"
 }
 
+val has_def = Define `has xs i x = (i < (LENGTH xs) /\ EL i xs = x)`
+
 (* s (f is) *)
 val (step_rules, step_cases, step_ind) = Hol_reln `
 (* lift -s-> *)
@@ -486,11 +490,16 @@ val (step_rules, step_cases, step_ind) = Hol_reln `
 (* 4.4.5.10 *)
 (!s f x. (s, f, [Call (n2w x)]) ---> (s, f, [Invoke (EL x f.module.funcaddrs)])) /\
 (* 4.4.5.11 *)
+(!s f x i a.
+    (s, f, [Const (V_i32 (n2w i)); Call_indirect (n2w x)])
+  --->
+    (s, f, if has (EL (HD f.module.tableaddrs) s.tables).elem i (SOME a) /\ has f.module.types x (funcinst_type (EL a s.funcs)) then [Invoke a] else [Trap])
+) /\
 (* 4.4.7.1 *)
-(! s f a t1s t2s m mod. (has s.funcs a (Native (t1s _> t2s) mod code)) /\ ts = code.locals /\ Expr is = code.body /\ m = LENGTH t2s ==>
-     (s, f, (MAP Const vs) ++ [Invoke a])
-   --->
-     (s, f, [Frame m <| module := mod; locals := vs ++ (MAP zero t1s) |> [Block t2s is]])
+(!s f a t1s t2s m mod code. (has s.funcs a (Native (t1s _> t2s) mod code)) /\ ts = code.locals /\ Expr is = code.body /\ m = LENGTH t2s ==>
+    (s, f, (MAP Const vs) ++ [Invoke a])
+  --->
+    (s, f, [Frame m <| module := mod; locals := vs ++ (MAP zero t1s) |> [Block t2s is]])
 ) /\
 (* 4.4.7.2 *)
 (! s f n vs. n = LENGTH vs ==> (s, f, [Frame n f vs]) ---> (s, f, vs))
@@ -515,10 +524,10 @@ val _ = set_mapped_fixity {
 
 val (step_complex_rules, step_complex_cases, step_complex_ind) = Hol_reln `
 (* lift ---> *)
-(! hfs s s' f f' is is'. (s, f, is) ---> (s', f', is') ==> (hfs, (s, f, is)) -c-> (hfs, (s', f', is'))) /\
+( hfs s s' f f' is is'. (s, f, is) ---> (s', f', is') ==> (hfs, (s, f, is)) -c-> (hfs, (s', f', is'))) /\
 (* 4.4.7.3 *)
 (* TODO: Ensure that s' extends s. *)
-(! hfs s s' f hf t a r. has s.funcs a (Host t hf) /\ (EL hf hfs) s vs = (s', r) /\ arguments_ok vs t ==>
+(!hfs s s' f hf t a r. has s.funcs a (Host t hf) /\ (EL hf hfs) s vs = (s', r) /\ arguments_ok vs t ==>
      (hfs, (s, f, (MAP Const vs) ++ [Invoke a]))
    -c->
      (hfs, (s', f, [wrap_option (\x.x) r]))
