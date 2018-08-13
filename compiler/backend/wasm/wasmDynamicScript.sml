@@ -8,16 +8,57 @@ val _ = new_theory "wasmDynamic"
 
 (* 4  Execution *)
 
+(* NOTE: We define a number of reduction relations:
+ *
+ *       (instr list) -s-> (instr list)  (from "simple")
+ *       For rules that do not depend on the current store/frame
+ *       but only operate on the stack.
+ *
+ *       configuration ---> configuration
+ *       For rules that do depend on the current store/frame.
+ *       This relation is the main one from the spec.
+ *
+ *       environment -c-> environment  (from "complex")
+ *       For rules that call host functions, to avoid a
+ *       circular dependency between store and hostfunc.
+ *
+ *       expr -e->  expr  (from "expression")
+ *       Similar to -s->.
+ *)
+
 (* 4.2  Runtime Structure *)
 
 (* 4.2.2  Results *)
-(* There is no necessity for a separate result type. *)
-(* val _ = Datatype `result = Result (val list) | R_Trap` *)
+(* NOTE: Stricly, the spec defines the first case as a val list. However, it states
+ * that currently a result can consist of at most one value.
+ * We model this as an option type:
+ *  SOME v  means that the outcome of a computation is v
+ *  NONE    means that the the outcome of a computation is a trap
+ * The issue that tracks multi-value returns is at
+ *   https://github.com/WebAssembly/design/issues/1146
+ *)
+val _ = type_abbrev("result", ``:val option``)
+
+val mk_result_def = Define `mk_result [Const v] = SOME v /\ mk_result [Trap] = NONE`
 
 (* 4.2.6  Function Instances *)
 (* Moved up since store needs funcinst. *)
-val _ = Datatype `funcinst = <| type: functype; module: moduleinst; code: func |>`
-(* TODO: Host Functions *)
+
+(* NOTE: Host Functions are not explicitly defined in the spec. We use them
+ *       as a vehicle to index a collection of host functions that live
+ *       outside the wasm store. The actual host function is then able to
+ *       consume the wasm store and create a new one (conforming with the
+ *       constraints on host functions mentioned in section 4.4.7.3 and
+ *       formalized in section 7.5.2.3.
+ *)
+val _ = type_abbrev("hostfunc", ``:num``)
+
+val _ = Datatype `
+  funcinst =
+(* <| type: functype; module: moduleinst; code: func |> *)
+    | Native functype moduleinst func
+(* <| type: functype; hostcode hostfunc |> *)
+    | Host   functype hostfunc`
 
 (* 4.2.7  Table Instances *)
 (* Moved up since store needs tableinst. *)
@@ -80,9 +121,18 @@ val _ = Datatype `config = Config store thread`
 
 (* The above definitions of threads and configs from the spec is
  * a bit heavy. We introduce triples as a shorthand notation, as
- * used in the spec. *)
-
+ * used in the spec.
+ *)
 val _ = type_abbrev("configuration", ``:(store # frame # (instr list))``)
+
+(* To model host functions that mutate the store, we wrap the
+ * confugiration once again into a structure that references host functions.
+ * Over this structure we can model what happens when a host function is
+ * invoked. The small step semantics in the wasm specification is simply
+ * lifted to this case.
+ *)
+val _ = type_abbrev("hostfuncimpl", ``:store -> (val list) -> (store # result)``)
+val _ = type_abbrev("environment", ``:((hostfuncimpl list) # configuration)``)
 
 val mk_config_def = Define `mk_config (s, f, is) = Config s (Thread f is)`
 
@@ -146,7 +196,7 @@ val _ = Define
  *       https://webassembly.github.io/spec/core/exec/numerics.html#floating-point-operations
  *)
 val _ = Define `
-               app_unop_f Neg = float_negate /\
+app_unop_f Neg = float_negate /\
 app_unop_f Abs = float_abs /\
 app_unop_f Ceil c = round roundTowardPositive (float_to_real c) /\
 app_unop_f Floor c = round roundTowardNegative (float_to_real c) /\
@@ -266,6 +316,14 @@ wrap_option f NONE     = Trap`
 val wrap_bool_def = Define `
 wrap_bool T = Const (V_i32 1w) /\
 wrap_bool F = Const (V_i32 0w)`
+
+val arguments_ok = Define `arguments_ok vs (Tf ts rt) = LIST_REL (\v t. t = typeof v) vs ts`
+
+val zero_def = Define `
+zero T_i32 = V_i32 0w /\
+zero T_i64 = V_i64 0w /\
+zero T_f32 = V_f32 <|Sign := 0w; Exponent := 0w; Significand := 0w|> /\
+zero T_f64 = V_f64 <|Sign := 0w; Exponent := 0w; Significand := 0w|>`
 
 (* Many steps operate only on the list of instructions
  * of the current thread. Since for these cases we do
@@ -426,14 +484,18 @@ val (step_rules, step_cases, step_ind) = Hol_reln `
 (* 4.4.5.9 *)
 (!s f vs n k. (n = LENGTH vs) ==> (s, f, [Frame n f (fill_b b k (vs ++ [Return]))]) ---> (s, f, vs)) /\
 (* 4.4.5.10 *)
-(!s f x. (s, f, [Call (n2w x)]) ---> (s, f, [Invoke (EL x f.module.funcaddrs)]))
+(!s f x. (s, f, [Call (n2w x)]) ---> (s, f, [Invoke (EL x f.module.funcaddrs)])) /\
 (* 4.4.5.11 *)
 (* 4.4.7.1 *)
+(! s f a t1s t2s m mod. (has s.funcs a (Native (t1s _> t2s) mod code)) /\ ts = code.locals /\ Expr is = code.body /\ m = LENGTH t2s ==>
+     (s, f, (MAP Const vs) ++ [Invoke a])
+   --->
+     (s, f, [Frame m <| module := mod; locals := vs ++ (MAP zero t1s) |> [Block t2s is]])
+) /\
 (* 4.4.7.2 *)
-(* 4.4.7.3 *)
+(! s f n vs. n = LENGTH vs ==> (s, f, [Frame n f vs]) ---> (s, f, vs))
 `
 
-(* Reduction of expressions are treated separately. *)
 val _ = set_mapped_fixity {
   fixity    = Infix(NONASSOC, 450),
   tok       = "-e->",
@@ -445,4 +507,24 @@ val _ = Hol_reln `
   (s, f, Expr is) -e-> (s', f', Expr is')
 )`
 
+val _ = set_mapped_fixity {
+  fixity    = Infix(NONASSOC, 450),
+  tok       = "-c->",
+  term_name = "step_complex"
+}
+
+val (step_complex_rules, step_complex_cases, step_complex_ind) = Hol_reln `
+(* lift ---> *)
+(! hfs s s' f f' is is'. (s, f, is) ---> (s', f', is') ==> (hfs, (s, f, is)) -c-> (hfs, (s', f', is'))) /\
+(* 4.4.7.3 *)
+(* TODO: Ensure that s' extends s. *)
+(! hfs s s' f hf t a r. has s.funcs a (Host t hf) /\ (EL hf hfs) s vs = (s', r) /\ arguments_ok vs t ==>
+     (hfs, (s, f, (MAP Const vs) ++ [Invoke a]))
+   -c->
+     (hfs, (s', f, [wrap_option (\x.x) r]))
+)
+`
+
+(* 7.5  Soundness *)
+(* TODO *)
 val _ = export_theory ()
