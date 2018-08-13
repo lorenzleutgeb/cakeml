@@ -283,6 +283,22 @@ val _ = Datatype `expr = Expr (instr list)`
 val _ = Datatype `func = <| type: typeidx; locals: valtype vec; body: expr |>`
 
 (* 2.5.4  Tables *)
+
+(* NOTE:
+ * Blog article on table imports:
+ *  https://hacks.mozilla.org/2017/07/webassembly-table-imports-what-are-they/
+ *
+ * Some reasoning behind tables:
+ *  https://github.com/WebAssembly/design/issues/898
+ *  https://github.com/WebAssembly/design/issues/1117
+ *
+ * Future features on tables:
+ *  https://github.com/WebAssembly/design/blob/master/FutureFeatures.md#more-table-operators-and-types
+ *
+ * JavaScript API on WebAssembly.Table Objects:
+ *  https://www.w3.org/TR/2018/WD-wasm-js-api-1-20180215/#tables
+ *  https://github.com/WebAssembly/design/blob/master/JS.md#webassemblytable-objects
+*)
 val _ = Datatype `table = <| type: tabletype |>`
 
 (* 2.5.5  Memories *)
@@ -320,6 +336,9 @@ val _ = Datatype `
 
 val _ = Datatype `import = <| module: name; name: name; desc: importdesc |>`
 
+(* NOTE: The possiblility of multiple tables/mems per module is mentioned at
+ *   https://github.com/WebAssembly/design/blob/master/FutureFeatures.md#multiple-tables-and-memories
+ *)
 val _ = Datatype `module =
   <| types  : functype vec
    ; funcs  : func     vec
