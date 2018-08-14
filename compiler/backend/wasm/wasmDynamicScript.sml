@@ -327,6 +327,44 @@ zero T_i64 = V_i64 0w /\
 zero T_f32 = V_f32 <|Sign := 0w; Exponent := 0w; Significand := 0w|> /\
 zero T_f64 = V_f64 <|Sign := 0w; Exponent := 0w; Significand := 0w|>`
 
+val has_def = Define `has xs i x = (i < (LENGTH xs) /\ EL i xs = x)`
+
+val bytes2word_def = Define `bytes2word (bs:byte list) = l2w 8n (MAP w2n bs)`
+val word2bytes_def = Define `word2bytes w = (MAP n2w (w2l 8n w)):(byte list)`
+
+val bytes2val_def = Define `
+(bytes2val T_i32 = V_i32 o bytes2word) /\
+(bytes2val T_i64 = V_i64 o bytes2word) /\
+(bytes2val T_f32 = V_f32 o (\ (w:word32). <| Sign := (0 >< 0) w; Exponent := ( 8 >< 1) w; Significand := (31 ><  9) w |>) o bytes2word) /\
+(bytes2val T_f64 = V_f64 o (\ (w:word64). <| Sign := (0 >< 0) w; Exponent := (11 >< 1) w; Significand := (63 >< 12) w |>) o bytes2word)
+`
+
+val val2bytes_def = Define `
+(val2bytes (V_i32 v) = word2bytes v) /\
+(val2bytes (V_i64 v) = word2bytes v) /\
+(val2bytes (V_f32 v) = word2bytes (word_join v.Significand (word_join v.Exponent v.Significand))) /\
+(val2bytes (V_f64 v) = word2bytes (word_join v.Significand (word_join v.Exponent v.Significand)))
+`
+
+val mem0_def = Define `mem0 s f = (EL (HD f.module.memaddrs) s.mems)`
+
+val mem_range = Define `mem_range m i ma n =
+  let ea = w2n ((word_add i ma.offset):i32); len = (n DIV 8) in
+    if (LENGTH m.data) <= ea + len then NONE
+    else                                SOME (ea, len)`
+
+(* Helper to read from a memory instance m, given the index i,
+ * the memarg ma and the with n. Returns SOME (byte list) in
+ * case the read is within bounds of m or else NONE.
+ *)
+val mem_read_def = Define `mem_read m i ma n =
+  OPTION_MAP (\ (ea, n). (GENLIST (\i. EL (ea + i) m.data) n)) (mem_range m i ma n)
+`
+
+val mem_write_def = Define `mem_write m i ma n v =
+  OPTION_MAP (\ (ea, n). (GENLIST (\i. if i < ea \/ ea + n < i then EL i m.data else EL (i - ea) (val2bytes v)) (LENGTH m.data)))
+`
+
 (* Many steps operate only on the list of instructions
  * of the current thread. Since for these cases we do
  * not care about store and frame, we write them down
@@ -344,7 +382,6 @@ val _ = set_mapped_fixity {
   tok       = "↝",
   term_name = "step_simple"
 }
-
 val (step_simple_rules, step_simple_cases, step_simple_ind) = Hol_reln `
 (* 4.2.13.3 *)
 (!e. e <> E0 ==> fill_e e [Trap] -s-> [Trap]) /\
@@ -464,10 +501,6 @@ val _ = set_mapped_fixity {
   tok       = "↪",
   term_name = "step"
 }
-
-val has_def = Define `has xs i x = (i < (LENGTH xs) /\ EL i xs = x)`
-
-(* s (f is) *)
 val (step_rules, step_cases, step_ind) = Hol_reln `
 (* lift -s-> *)
 (!s f is is'. (is -s-> is') ==> (s, f, is) ---> (s, f, is')) /\
@@ -480,9 +513,22 @@ val (step_rules, step_cases, step_ind) = Hol_reln `
 (* 4.4.3.4 *)
 (!s f x. (s, f, [Get_global (n2w x)]) ---> (s, f, [Const (EL (EL x f.module.globaladdrs) s.globals).value])) /\
 (* 4.4.3.5 *)
+(!s f x a v. a = EL x f.module.globaladdrs ==>
+    (s, f, [Const v; Set_global (n2w x)])
+  --->
+    (s with globals := LUPDATE ((EL a s.globals) with value := v) a s.globals, f, [])
+) /\
 (* 4.4.4.1 *)
-(!s f. (a = HD f.module.memaddrs /\ m = (EL a s.mems) /\ ea = word_add i ma.offset /\ n = bit_width t /\ (w2n ea) + (n DIV 8) <= (LENGTH m.data) /\ bs = m ) ==> (s, f, [Const (V_i32 i); Load t NONE ma]) ---> (s, f, [mk t bs])) /\
+(* First case, for Load without any further arguments. *)
+(!s f t i ma. (s, f, [Const (V_i32 i); Load t NONE ma]) ---> (s, f, [wrap_option (bytes2val t) (mem_read (mem0 s f) i ma (bit_width t))])) /\
+(* Second case, for Load with storage size and sign extension. *)
+(!s f. (s, f, [Const (V_i32 i); Load t (SOME (sz, sx)) ma]) ---> (s, f, [wrap_option (bytes2val t) (mem_read (mem0 s f) i ma (bit_width_p sz))])) /\
 (* 4.4.4.2 *)
+(* TODO *)
+(!s f t v a w ma bs. (c = (s, f, [Const (V_i32 i); Const v; Store t NONE ma]) /\ a = HD f.module.memaddrs /\ t = typeof v /\ w = mem_write (EL a s.mems) i ma (bit_width t) v) ==>
+    (w = NONE    ==> c ---> (s, f, [Trap])) /\
+    (w = SOME bs ==> c ---> (s with mems := LUPDATE a (m with data := bs) s.mems), f, [])
+) /\
 (* 4.4.4.3 *)
 (!s f. (s, f, [Current_memory]) ---> (s, f, [Const (V_i32 (n2w (bytes_to_pages (LENGTH (EL (HD f.module.memaddrs) s.mems).data))))])) /\
 (* 4.4.5.9 *)
@@ -510,7 +556,6 @@ val _ = set_mapped_fixity {
   tok       = "-e->",
   term_name = "step_expr"
 }
-
 val _ = Hol_reln `
 (!s f is s' f' is'. (s, f, is) ---> (s', f', is') ==>
   (s, f, Expr is) -e-> (s', f', Expr is')
@@ -521,7 +566,6 @@ val _ = set_mapped_fixity {
   tok       = "-c->",
   term_name = "step_complex"
 }
-
 val (step_complex_rules, step_complex_cases, step_complex_ind) = Hol_reln `
 (* lift ---> *)
 ( hfs s s' f f' is is'. (s, f, is) ---> (s', f', is') ==> (hfs, (s, f, is)) -c-> (hfs, (s', f', is'))) /\
