@@ -177,10 +177,10 @@ val _ = type_abbrev( "labelidx", ``:word32``)
 val _ = Datatype `val = V_i32 i32 | V_i64 i64 | V_f32 f32 | V_f64 f64`
 
 val typeof_def = Define `
-(! x . typeof (V_i32 x) = T_i32) /\
-(! x . typeof (V_i64 x) = T_i64) /\
-(! x . typeof (V_f32 x) = T_f32) /\
-(! x . typeof (V_f64 x) = T_f64)`
+(!x. typeof (V_i32 x) = T_i32) /\
+(!x. typeof (V_i64 x) = T_i64) /\
+(!x. typeof (V_f32 x) = T_f32) /\
+(!x. typeof (V_f64 x) = T_f64)`
 
 (* 4.2.4  Addresses *)
 (* https://www.w3.org/TR/2018/WD-wasm-core-1-20180215/#addresses%E2%91%A0 *)
