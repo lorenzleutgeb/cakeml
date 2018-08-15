@@ -92,21 +92,21 @@ val (typ_rules, typ_cases, typ_ind) = Hol_reln `
 (* 3.3.1.1 *)
 (! c v . c |- [Const v] ::- ([] _> [(typeof v)])) /\
 (* 3.3.1.2 - 3.3.1.5 *)
-(! c t p . is_int_t t ==> c |- [Unop_i t p] ::- endofunc [t]) /\
-(! c t p . is_float_t t ==> c |- [Unop_f t p] ::- endofunc [t]) /\
-(! c t p . is_int_t t ==> c |- [Binop_i t p] ::- ([t; t] _> [t])) /\
-(! c t p . is_float_t t ==> c |- [Binop_f t p] ::- ([t; t] _> [t])) /\
-(! c t p . is_int_t t ==> c |- [Testop_i t p] ::- ([t] _> [T_i32])) /\
-(! c t p . is_int_t t ==> c |- [Relop_i t p] ::- ([t; t] _> [T_i32])) /\
-(! c t p . is_float_t t ==> c |- [Relop_f t p] ::- ([t; t] _> [T_i32])) /\
+(! c t p . t = Tv Ki w ==> c |- [Unop_i w p] ::- endofunc [t]) /\
+(! c t p . t = Tv Kf w ==> c |- [Unop_f w p] ::- endofunc [t]) /\
+(! c t p . t = Tv Ki w ==> c |- [Binop_i w p] ::- ([t; t] _> [t])) /\
+(! c t p . t = Tv Kf w ==> c |- [Binop_f w p] ::- ([t; t] _> [t])) /\
+(! c t p . t = Tv Ki w ==> c |- [Testop_i w p] ::- ([t] _> [T_i32])) /\
+(! c t p . t = Tv Ki w ==> c |- [Relop_i w p] ::- ([t; t] _> [T_i32])) /\
+(! c t p . t = Tv Kf w ==> c |- [Relop_f w p] ::- ([t; t] _> [T_i32])) /\
 (* 3.3.1.6 *)
 (! c. (c |- [Wrap] ::- ([T_i64] _> [T_i32]))) /\
 (! c sx. (c |- [Extend sx] ::- ([T_i32] _> [T_i64]))) /\
-(! c t1 t2 sx. is_int_t t1 /\ is_float_t t2 ==> (c |- [Trunc t1 sx t2] ::- ([t2] _> [t1]))) /\
+(! c w1 w2 sx. (c |- [Trunc t1 sx t2] ::- ([Tv Kf w2] _> [Tv Ki w1]))) /\
 (! c. (c |- [Demote] ::- ([T_f64] _> [T_f32]))) /\
 (! c. (c |- [Promote] ::- ([T_f32] _> [T_f64]))) /\
-(! c t1 t2 sx. is_float_t t1 /\ is_int_t t2 ==> (c |- [Convert t1 sx t2] ::- ([t2] _> [t1]))) /\
-(! c t1 t2 . (is_float_t t1 <=> ~is_float_t t2) ==> (c |- [Reinterpret t1 t2] ::- ([t2] _> [t1]))) /\
+(! c w1 w2 sx. (c |- [Convert w1 sx w2] ::- ([Tv Ki w2] _> [Tv Ki w1]))) /\
+(! c t . (c |- [Reinterpret t] ::- ([other_kind t] _> [t]))) /\
 (* 3.3.2.1 - 3.3.2.2. *)
 (! c t . c |- [Drop] ::- consumes [t]) /\
 (! c t . c |- [Select] ::- [t; t; T_i32] _> [t]) /\
