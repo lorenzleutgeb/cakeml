@@ -56,32 +56,32 @@ val _ = type_abbrev("codepoint", ``:num``)
 val _ = type_abbrev("name", ``:(codepoint list)``)
 
 (* 2.3.1  Value Types *)
-(* https://www.w3.org/TR/2018/WD-wasm-core-1-20180215/#value-types%E2%91%A0 *)
-val _ = Datatype `valtype = T_i32 | T_i64 | T_f32 | T_f64`
+(* The spec defines {i,f}{32,64} as atomic types. We separate along "kind"
+ * (integer or float) as well as "width" (32bit or 64bit) to have a little
+ * more control over parts where the spec resorts to meta-level replacements.
+ *)
+val _ = Datatype `kind  = Ki  | Kf`
+val _ = Datatype `width = W32 | W64`
+
+val _ = Datatype `valtype = Tv kind width`
+
+val _ = Define `T_i32 = Tv Ki W32`
+val _ = Define `T_i64 = Tv Ki W64`
+val _ = Define `T_f32 = Tv Kf W32`
+val _ = Define `T_f64 = Tv Kf W64`
+
+val _ = Define `flip_width W32 = W64 /\ flip_width W64 = W32`
+val _ = Define `flip_kind Ki = Kf /\ flip_kind Kf = Ki`
+
+val _ = Define `other_kind (Tv k w) = (Tv (flip_kind k) w)`
+val _ = Define `other_width (Tv k w) = (Tv k (flip_width w))`
 
 (* 2.3.1.1  Conventions *)
-val bit_width_def = Define
-  `bit_width t = case t of T_i32 => 32n
-                         | T_i64 => 64n
-                         | T_f32 => 32n
-                         | T_f64 => 64n`
+val bit_width_def = Define `bit_width (Tv k W32) = 32n /\ bit_width (Tv k W64) = 64n`
 
 val _ = Datatype `tp = Tp_i8 | Tp_i16 | Tp_i32`
 
-val bit_width_p_def = Define `
-  bit_width_p Tp_i8 = 8n /\ bit_width_p Tp_i16 = 16n /\ bit_width_p Tp_i32 = 32n`
-
-val is_int_t_def = Define `
-  is_int_t t <=> t = T_i32 \/ t = T_i64`
-
-val is_float_t_def = Define `
-  is_float_t t <=> t = T_f32 \/ t = T_f64`
-
-val int_float_disjoint = store_thm(
- "int_float_disjoint",
-  ``!t. is_int_t t <> is_float_t t``,
-  Cases_on `t` >> rw[is_int_t_def,is_float_t_def]
-)
+val bit_width_p_def = Define `bit_width_p Tp_i8 = 8n /\ bit_width_p Tp_i16 = 16n /\ bit_width_p Tp_i32 = 32n`
 
 (* 2.3.2  Result Types *)
 (* TODO: This may be a bit too general. Currently,
@@ -148,7 +148,7 @@ val _ = Datatype `
     | Rotl
     | Rotr`
 
-val _ = Datatype `funop = Neg | Abs | Ceil | Floor | Trunc | Nearest | Sqrt`
+val _ = Datatype `funop = Negf | Absf | Ceilf | Floorf | Truncf | Nearestf | Sqrtf`
 
 val _ = Datatype `fbinop = Addf | Subf | Mulf | Divf | Min | Max | Copysign`
 
@@ -225,21 +225,21 @@ val _ = Datatype `
   instr =
 (* 2.4.1  Numeric Instructions *)
     | Const val
-    | Unop_i   valtype   iunop
-    | Unop_f   valtype   funop
-    | Binop_i  valtype  ibinop
-    | Binop_f  valtype  fbinop
-    | Testop_i valtype itestop
-    | Relop_i  valtype  irelop
-    | Relop_f  valtype  frelop
+    | Unop_i   width   iunop
+    | Unop_f   width   funop
+    | Binop_i  width  ibinop
+    | Binop_f  width  fbinop
+    | Testop_i width itestop
+    | Relop_i  width  irelop
+    | Relop_f  width  frelop
     (* cvtops *)
-    | Wrap       (* i32 *)    (* i64 *)
-    | Extend     (* i64 *) sx (* i32 *)
-    | Trunc       valtype  sx  valtype  (* must be inn fmm *)
-    | Demote     (* f32 *)    (* f64 *)
-    | Promote    (* f64 *)    (* f32 *)
-    | Convert     valtype  sx  valtype  (* must be fnn imm *)
-    | Reinterpret valtype      valtype  (* must be fnn inn or inn fnn*)
+    | Wrap        (*i32*)    (*i64*)
+    | Extend      (*i64*) sx (*i32*)
+    | Trunc        width  sx  width
+    | Demote      (*f32*)    (*f64*)
+    | Promote     (*f64*)    (*f32*)
+    | Convert      width  sx  width
+    | Reinterpret valtype
 (* 2.4.2  Parametric Instructions *)
     | Drop
     | Select
