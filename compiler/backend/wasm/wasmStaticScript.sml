@@ -100,8 +100,13 @@ val (typ_rules, typ_cases, typ_ind) = Hol_reln `
 (! c t p . is_int_t t ==> c |- [Relop_i t p] ::- ([t; t] _> [T_i32])) /\
 (! c t p . is_float_t t ==> c |- [Relop_f t p] ::- ([t; t] _> [T_i32])) /\
 (* 3.3.1.6 *)
-(! c t1 t2 . (t1 <> t2 /\ ((is_float_t t1 /\ is_float_t t2) \/ (is_int_t t1 /\ is_int_t t2 /\ bit_width t1 < bit_width t2))) ==> (c |- [Cvtop t1 Convert t2 NONE] ::- ([t2] _> [t1]))) /\
-(! c t1 t2 . (t1 <> t2 /\ bit_width t1 = bit_width t2) ==> c |- [Cvtop t1 Reinterpret t2 NONE] ::- ([t2] _> [t1])) /\
+(! c. (c |- [Wrap] ::- ([T_i64] _> [T_i32]))) /\
+(! c sx. (c |- [Extend sx] ::- ([T_i32] _> [T_i64]))) /\
+(! c t1 t2 sx. is_int_t t1 /\ is_float_t t2 ==> (c |- [Trunc t1 sx t2] ::- ([t2] _> [t1]))) /\
+(! c. (c |- [Demote] ::- ([T_f64] _> [T_f32]))) /\
+(! c. (c |- [Promote] ::- ([T_f32] _> [T_f64]))) /\
+(! c t1 t2 sx. is_float_t t1 /\ is_int_t t2 ==> (c |- [Convert t1 sx t2] ::- ([t2] _> [t1]))) /\
+(! c t1 t2 . (is_float_t t1 <=> ~is_float_t t2) ==> (c |- [Reinterpret t1 t2] ::- ([t2] _> [t1]))) /\
 (* 3.3.2.1 - 3.3.2.2. *)
 (! c t . c |- [Drop] ::- consumes [t]) /\
 (! c t . c |- [Select] ::- [t; t; T_i32] _> [t]) /\
