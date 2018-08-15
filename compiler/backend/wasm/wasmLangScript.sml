@@ -158,7 +158,7 @@ val _ = Datatype `irelop = Eq | Ne | Lt sx | Gt sx | Le sx | Ge sx`
 
 val _ = Datatype `frelop = Eqf | Nef | Ltf | Gtf | Lef | Gef`
 
-val _ = Datatype `cvtop = Convert | Reinterpret`
+val _ = Datatype `cvtop = Wrap | Extend sx | Trunc sx | Convert sx | Demote | Promote | Reinterpret`
 
 val _ = Datatype `memarg = <| offset: word32; align: word32 |>`
 
@@ -232,7 +232,14 @@ val _ = Datatype `
     | Testop_i valtype itestop
     | Relop_i  valtype  irelop
     | Relop_f  valtype  frelop
-    | Cvtop    valtype   cvtop valtype (sx option)
+    (* cvtops *)
+    | Wrap       (* i32 *)    (* i64 *)
+    | Extend     (* i64 *) sx (* i32 *)
+    | Trunc       valtype  sx  valtype  (* must be inn fmm *)
+    | Demote     (* f32 *)    (* f64 *)
+    | Promote    (* f64 *)    (* f32 *)
+    | Convert     valtype  sx  valtype  (* must be fnn imm *)
+    | Reinterpret valtype      valtype  (* must be fnn inn or inn fnn*)
 (* 2.4.2  Parametric Instructions *)
     | Drop
     | Select
