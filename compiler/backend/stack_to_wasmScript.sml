@@ -1,8 +1,8 @@
-open preamble stackLangTheory labLangTheory;
+open preamble stackLangTheory labLangTheory (* TODO: Get rid of labLang *) wasmLangTheory;
 local open stack_allocTheory stack_removeTheory stack_namesTheory
            word_to_stackTheory bvl_to_bviTheory in end
 
-val _ = new_theory "stack_to_lab";
+val _ = new_theory "stack_to_wasm";
 
 val _ = patternMatchesLib.ENABLE_PMATCH_CASES();
 
@@ -26,65 +26,97 @@ val _ = export_rewrites ["negate_def"];
 
 val _ = temp_overload_on("++",``misc$Append``)
 
+(* Function to map basic instructions. The following does not cover all instrs,
+ * but only those for which stackSem$inst actually defines a semantics. *)
+val _ = Define `
+  flatten_instr x:(64 asm$inst) =
+    dtcase x of
+      | Skip => SOME [Noop]
+      | Const reg w => NONE
+      | Arith (Binop bop r1 r2 ri) => NONE
+      | Arith (Shift sh r1 r2 n) => NONE
+      | Arith (Div r1 r2 r3) => NONE
+      | Arith (AddCarry r1 r2 r3 r4) => NONE
+      | Arith (AddOverflow r1 r2 r3 r4) => NONE
+      | Arith (SubOverflow r1 r2 r3 r4) => NONE
+      | Arith (LongMul r1 r2 r3 r4) => NONE
+      | Arith (LongDiv r1 r2 r3 r4 r5) => NONE
+      | Mem Load r (Addr a w) => NONE
+      | Mem Load8 r (Addr a w) => NONE
+      | Mem Store r (Addr a w) => NONE
+      | Mem Store8 r (Addr a w) => NONE
+      | FP (FPLess r d1 d2) => NONE
+      | FP (FPLessEqual r d1 d2) => NONE
+      | FP (FPEqual r d1 d2) => NONE
+      | FP (FPMov d1 d2) => NONE
+      | FP (FPAbs d1 d2) => NONE
+      | FP (FPNeg d1 d2) => NONE
+      | FP (FPSqrt d1 d2) => NONE
+      | FP (FPAdd d1 d2 d3) => NONE
+      | FP (FPSub d1 d2 d3) => NONE
+      | FP (FPMul d1 d2 d3) => NONE
+      | FP (FPDiv d1 d2 d3) => NONE
+      | FP (FPMovToReg d r1 r2) => NONE
+      | FP (FPMovFromReg d r1 r2) => NONE
+      | FP (FPToInt d1 d2) => NONE
+      | FP (FPFromInt d1 d2) => NONE
+      | _ => NONE`
+
 local val flatten_quotation = `
   flatten p n m =
     dtcase p of
-    | Tick => (List [Asm (Inst (Skip)) [] 0],F,m)
-    | Inst a => (List [Asm (Inst a) [] 0],F,m)
-    | Halt _ => (List [LabAsm Halt 0w [] 0],T,m)
-    | Seq p1 p2 =>
-        let (xs,nr1,m) = flatten p1 n m in
-        let (ys,nr2,m) = flatten p2 n m in
-          (xs ++ ys, nr1 ∨ nr2, m)
-    | If c r ri p1 p2 =>
-        let (xs,nr1,m) = flatten p1 n m in
-        let (ys,nr2,m) = flatten p2 n m in
-          if (p1 = Skip) /\ (p2 = Skip) then (List [],F,m)
-          else if p1 = Skip then
-            (List [LabAsm (JumpCmp c r ri (Lab n m)) 0w [] 0] ++ ys ++
-             List [Label n m 0],F,m+1)
-          else if p2 = Skip then
-            (List [LabAsm (JumpCmp (negate c) r ri (Lab n m)) 0w [] 0] ++ xs ++
-             List [Label n m 0],F,m+1)
-          else if nr1 then
-            (List [LabAsm (JumpCmp (negate c) r ri (Lab n m)) 0w [] 0] ++ xs ++
-             List [Label n m 0] ++ ys,nr2,m+1)
-          else if nr2 then
-            (List [LabAsm (JumpCmp c r ri (Lab n m)) 0w [] 0] ++ ys ++
-             List [Label n m 0] ++ xs,nr1,m+1)
-          else
-            (List [LabAsm (JumpCmp c r ri (Lab n m)) 0w [] 0] ++ ys ++
-             List [LabAsm (Jump (Lab n (m+1))) 0w [] 0; Label n m 0] ++ xs ++
-             List [Label n (m+1) 0],nr1 ∧ nr2,m+2)
-    | While c r ri p1 =>
-        let (xs,_,m) = flatten p1 n m in
-          (List [Label n m 0; LabAsm (JumpCmp (negate c) r ri (Lab n (m+1))) 0w [] 0] ++
-           xs ++ List [LabAsm (Jump (Lab n m)) 0w [] 0; Label n (m+1) 0],F,m+2)
-    | Raise r => (List [Asm (JumpReg r) [] 0],T,m)
-    | Return r _ => (List [Asm (JumpReg r) [] 0],T,m)
-    | Call NONE dest handler => (List [compile_jump dest],T,m)
-    | Call (SOME (p1,lr,l1,l2)) dest handler =>
-        let (xs,nr1,m) = flatten p1 n m in
-        let prefix = List [LabAsm (LocValue lr (Lab l1 l2)) 0w [] 0;
-                 compile_jump dest; Label l1 l2 0] ++ xs in
-        (dtcase handler of
-        | NONE => (prefix, nr1, m)
-        | SOME (p2,k1,k2) =>
-            let (ys,nr2,m) = flatten p2 n m in
-              (prefix ++ (List [LabAsm (Jump (Lab n m)) 0w [] 0; Label k1 k2 0] ++
-              ys ++ List [Label n m 0]), nr1 ∧ nr2, m+1))
-    | JumpLower r1 r2 target =>
-        (List [LabAsm (JumpCmp Lower r1 (Reg r2) (Lab target 0)) 0w [] 0],F,m)
-    | FFI ffi_index _ _ _ _ lr => (List [LabAsm (LocValue lr (Lab n m)) 0w [] 0;
-                                         LabAsm (CallFFI ffi_index) 0w [] 0;
-                                         Label n m 0],F,m+1)
-    | LocValue i l1 l2 => (List [LabAsm (LocValue i (Lab l1 l2)) 0w [] 0],F,m)
-    | Install _ _ _ _ ret =>
-      (List [LabAsm (LocValue ret (Lab n m)) 0w [] 0;
-      LabAsm Install 0w [] 0;
-      Label n m 0],F,m+1)
-    | CodeBufferWrite r1 r2 =>
-      (List [Asm (Cbw r1 r2) [] 0],F,m)
+    | Tick => SOME [Noop] (* (List [Asm (Inst (Skip)) [] 0],F,m) *)
+    | Inst a => SOME [flatten_instr a](* (List [Asm (Inst a) [] 0],F,m) *)
+    | Halt _ => NONE (* (List [LabAsm Halt 0w [] 0],T,m) *)
+    | Seq p1 p2 => NONE
+        (* let (xs,nr1,m) = flatten p1 n m in *)
+        (* let (ys,nr2,m) = flatten p2 n m in *)
+        (*   (xs ++ ys, nr1 ∨ nr2, m) *)
+    | If c r ri p1 p2 => NONE
+        (* let (xs,nr1,m) = flatten p1 n m in *)
+        (* let (ys,nr2,m) = flatten p2 n m in *)
+        (*   if (p1 = Skip) /\ (p2 = Skip) then (List [],F,m) *)
+        (*   else if p1 = Skip then *)
+        (*     (List [LabAsm (JumpCmp c r ri (Lab n m)) 0w [] 0] ++ ys ++ *)
+        (*      List [Label n m 0],F,m+1) *)
+        (*   else if p2 = Skip then *)
+        (*     (List [LabAsm (JumpCmp (negate c) r ri (Lab n m)) 0w [] 0] ++ xs ++ *)
+        (*      List [Label n m 0],F,m+1) *)
+        (*   else if nr1 then *)
+        (*     (List [LabAsm (JumpCmp (negate c) r ri (Lab n m)) 0w [] 0] ++ xs ++ *)
+        (*      List [Label n m 0] ++ ys,nr2,m+1) *)
+        (*   else if nr2 then *)
+        (*     (List [LabAsm (JumpCmp c r ri (Lab n m)) 0w [] 0] ++ ys ++ *)
+        (*      List [Label n m 0] ++ xs,nr1,m+1) *)
+        (*   else *)
+        (*     (List [LabAsm (JumpCmp c r ri (Lab n m)) 0w [] 0] ++ ys ++ *)
+        (*      List [LabAsm (Jump (Lab n (m+1))) 0w [] 0; Label n m 0] ++ xs ++ *)
+        (*      List [Label n (m+1) 0],nr1 ∧ nr2,m+2) *)
+    | While c r ri p1 => NONE (* TODO: Translate to Loop *)
+        (* let (xs,_,m) = flatten p1 n m in *)
+        (*   (List [Label n m 0; LabAsm (JumpCmp (negate c) r ri (Lab n (m+1))) 0w [] 0] ++ *)
+        (*    xs ++ List [LabAsm (Jump (Lab n m)) 0w [] 0; Label n (m+1) 0],F,m+2) *)
+    | Raise r => NONE (* (List [Asm (JumpReg r) [] 0],T,m) *) (* TODO: Implement exception handling. *)
+    | Return r _ => NONE (* (List [Asm (JumpReg r) [] 0],T,m) *) (* TODO: Translate to Return *)
+    | Call NONE dest handler => NONE (* (List [compile_jump dest],T,m) *) (* TODO: Translate to Call *)
+    | Call (SOME (p1,lr,l1,l2)) dest handler => NONE
+        (* let (xs,nr1,m) = flatten p1 n m in *)
+        (* let prefix = List [LabAsm (LocValue lr (Lab l1 l2)) 0w [] 0; *)
+        (*          compile_jump dest; Label l1 l2 0] ++ xs in *)
+        (* (dtcase handler of *)
+        (* | NONE => (prefix, nr1, m) *)
+        (* | SOME (p2,k1,k2) => *)
+        (*     let (ys,nr2,m) = flatten p2 n m in *)
+        (*       (prefix ++ (List [LabAsm (Jump (Lab n m)) 0w [] 0; Label k1 k2 0] ++ *)
+        (*       ys ++ List [Label n m 0]), nr1 ∧ nr2, m+1)) *)
+    | JumpLower r1 r2 target => NONE (* TODO: Br_if *)
+        (* (List [LabAsm (JumpCmp Lower r1 (Reg r2) (Lab target 0)) 0w [] 0],F,m) *)
+    | FFI ffi_index _ _ _ _ lr => NONE (* (List [LabAsm (LocValue lr (Lab n m)) 0w [] 0; *)
+                                       (*   LabAsm (CallFFI ffi_index) 0w [] 0; *)
+                                       (*   Label n m 0],F,m+1) *)
+    | LocValue i l1 l2 => NONE (* (List [LabAsm (LocValue i (Lab l1 l2)) 0w [] 0],F,m) *) (* TODO: What is this? *)
+    | Install _ _ _ _ ret => NONE (* TODO: Left out in first implementation. *)
+    | CodeBufferWrite r1 r2 => NONE (* TODO: Left out in first implementation. *)
     | _  => (List [],F,m)`
 in
 val flatten_def = Define flatten_quotation
