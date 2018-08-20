@@ -26,7 +26,7 @@ open HolKernel boolLib Parse bossLib wordsTheory binary_ieeeTheory integer_wordL
 
 val _ = ParseExtras.tight_equality()
 
-val _ = new_theory "wasmStatic"
+val _ = new_theory "wasmStaticSem"
 
 (* 3  Validation *)
 (* 3.1.1  Contexts *)

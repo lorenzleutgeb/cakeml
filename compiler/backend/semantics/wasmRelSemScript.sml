@@ -28,7 +28,7 @@ val _ = patternMatchesLib.ENABLE_PMATCH_CASES()
 
 val _ = ParseExtras.tight_equality()
 
-val _ = new_theory "wasmSmallStepSem"
+val _ = new_theory "wasmRelSem"
 
 (* 4  Execution *)
 
