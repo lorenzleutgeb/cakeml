@@ -137,7 +137,10 @@ val _ = type_abbrev("hostfuncimpl", ``:store -> (val list) -> (store # result)``
 val _ = Datatype `
   state =
     <| ffi: 'ffi ffi_state
-     ; config: config
+     ; store: store
+     ; frame: frame
+     ; stack: (instr list)
+     ; clock: num
      |>`
 
 val mk_config_def = Define `mk_config (s, f, is) = Config s (Thread f is)`
