@@ -29,7 +29,7 @@ val _ = temp_overload_on("++",``misc$Append``)
 (* Function to map basic instructions. The following does not cover all instrs,
  * but only those for which stackSem$inst actually defines a semantics. *)
 val _ = Define `
-  flatten_instr x:(64 asm$inst) =
+  flatten_instr (Inst x) =
     dtcase x of
       | Skip => SOME [Noop]
       | Const reg w => NONE
@@ -62,11 +62,13 @@ val _ = Define `
       | FP (FPFromInt d1 d2) => NONE
       | _ => NONE`
 
+(*
+
 local val flatten_quotation = `
   flatten p n m =
     dtcase p of
     | Tick => SOME [Noop] (* (List [Asm (Inst (Skip)) [] 0],F,m) *)
-    | Inst a => SOME [flatten_instr a](* (List [Asm (Inst a) [] 0],F,m) *)
+    | Inst a => SOME [flatten_instr (Inst a)](* (List [Asm (Inst a) [] 0],F,m) *)
     | Halt _ => NONE (* (List [LabAsm Halt 0w [] 0],T,m) *)
     | Seq p1 p2 => NONE
         (* let (xs,nr1,m) = flatten p1 n m in *)
@@ -117,7 +119,7 @@ local val flatten_quotation = `
     | LocValue i l1 l2 => NONE (* (List [LabAsm (LocValue i (Lab l1 l2)) 0w [] 0],F,m) *) (* TODO: What is this? *)
     | Install _ _ _ _ ret => NONE (* TODO: Left out in first implementation. *)
     | CodeBufferWrite r1 r2 => NONE (* TODO: Left out in first implementation. *)
-    | _  => (List [],F,m)`
+    | _  => NONE`
 in
 val flatten_def = Define flatten_quotation
 
@@ -152,5 +154,5 @@ val compile_def = Define `
                 max_heap sp InitGlobals_location prog in
    let prog = stack_names$compile stack_conf.reg_names prog in
      MAP prog_to_section prog`;
-
+*)
 val _ = export_theory();
