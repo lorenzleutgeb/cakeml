@@ -4,7 +4,7 @@ val _ = patternMatchesLib.ENABLE_PMATCH_CASES()
 
 val _ = ParseExtras.tight_equality()
 
-val _ = new_theory "wasmFunctionalSem"
+val _ = new_theory "wasmFunSem"
 
 val spop_def = Define `spop 0 s = s /\ spop n s = spop (n - 1) (let h::t = s.stack in s with stack := t)`
 val spush_def = Define `spush i s = s with stack := i :: s.stack`
