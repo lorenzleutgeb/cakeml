@@ -6,7 +6,7 @@ val _ = ParseExtras.tight_equality()
 
 val _ = new_theory "wasmFunSem"
 
-val spop_def = Define `spop 0 s = s /\ spop n s = spop (n - 1) (let h::t = s.stack in s with stack := t)`
+val spop_def = Define `spop 0n s = s /\ spop n s = s with stack := (let h::t = (spop (n - 1n) s).stack in t)`
 val spush_def = Define `spush i s = s with stack := i :: s.stack`
 
 val evaluate_def = Define `
