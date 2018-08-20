@@ -45,11 +45,6 @@ val _ = type_abbrev("u64", ``:64 word``)
 val _ = type_abbrev("s64", ``:64 word``)
 val _ = type_abbrev("i64", ``:u64``)
 
-(* 2.2.3  Floating-Point *)
-(* https://www.w3.org/TR/2018/WD-wasm-core-1-20180215/#floating-point%E2%91%A0 *)
-val _ = type_abbrev("f32", ``:( 8, 23) float``)
-val _ = type_abbrev("f64", ``:(11, 52) float``)
-
 (* 2.2.4  Names *)
 (* TODO: Find a better representation for codepoints. *)
 val _ = type_abbrev("codepoint", ``:num``)
@@ -75,6 +70,9 @@ val _ = Define `flip_kind Ki = Kf /\ flip_kind Kf = Ki`
 
 val _ = Define `other_kind (Tv k w) = (Tv (flip_kind k) w)`
 val _ = Define `other_width (Tv k w) = (Tv k (flip_width w))`
+
+val _ = Define `kindof (Tv k w) = k`
+val _ = Define `widthof (Tv k w) = w`
 
 (* 2.3.1.1  Conventions *)
 val bit_width_def = Define `bit_width (Tv k W32) = 32n /\ bit_width (Tv k W64) = 64n`
@@ -142,6 +140,7 @@ val _ = Datatype `
     | Rem sx
     | And
     | Or
+    | Xor
     | Not
     | Shl
     | Shr sx
@@ -158,7 +157,15 @@ val _ = Datatype `irelop = Eq | Ne | Lt sx | Gt sx | Le sx | Ge sx`
 
 val _ = Datatype `frelop = Eqf | Nef | Ltf | Gtf | Lef | Gef`
 
-val _ = Datatype `cvtop = Wrap | Extend sx | Trunc sx | Convert sx | Demote | Promote | Reinterpret`
+(* All conversions grouped. *)
+val _ = Datatype `conv =
+  | Wrap        (*i32*)    (*i64*)
+  | Extend      (*i64*) sx (*i32*)
+  | Trunc        width  sx  width
+  | Demote      (*f32*)    (*f64*)
+  | Promote     (*f64*)    (*f32*)
+  | Convert      width  sx  width
+  | Reinterpret  valtype (* one side is given, the other is implicit *)`
 
 val _ = Datatype `memarg = <| offset: word32; align: word32 |>`
 
@@ -174,7 +181,7 @@ val _ = type_abbrev( "labelidx", ``:word32``)
 
 (* 4.2.1  Values *)
 (* Moved up since frame depends on val. *)
-val _ = Datatype `val = V_i32 i32 | V_i64 i64 | V_f32 f32 | V_f64 f64`
+val _ = Datatype `val = V_i32 word32 | V_i64 word64 | V_f32 ((8, 23) float) | V_f64 ((11, 52) float)`
 
 val typeof_def = Define `
 (!x. typeof (V_i32 x) = T_i32) /\
@@ -232,14 +239,8 @@ val _ = Datatype `
     | Testop_i width itestop
     | Relop_i  width  irelop
     | Relop_f  width  frelop
-    (* cvtops *)
-    | Wrap        (*i32*)    (*i64*)
-    | Extend      (*i64*) sx (*i32*)
-    | Trunc        width  sx  width
-    | Demote      (*f32*)    (*f64*)
-    | Promote     (*f64*)    (*f32*)
-    | Convert      width  sx  width
-    | Reinterpret valtype
+    (* NOTE: Conversion is not an actual instruction but groups conversions. *)
+    | Conversion conv
 (* 2.4.2  Parametric Instructions *)
     | Drop
     | Select

@@ -100,13 +100,13 @@ val (typ_rules, typ_cases, typ_ind) = Hol_reln `
 (! c t p . t = Tv Ki w ==> c |- [Relop_i w p] ::- ([t; t] _> [T_i32])) /\
 (! c t p . t = Tv Kf w ==> c |- [Relop_f w p] ::- ([t; t] _> [T_i32])) /\
 (* 3.3.1.6 *)
-(! c. (c |- [Wrap] ::- ([T_i64] _> [T_i32]))) /\
-(! c sx. (c |- [Extend sx] ::- ([T_i32] _> [T_i64]))) /\
-(! c w1 w2 sx. (c |- [Trunc t1 sx t2] ::- ([Tv Kf w2] _> [Tv Ki w1]))) /\
-(! c. (c |- [Demote] ::- ([T_f64] _> [T_f32]))) /\
-(! c. (c |- [Promote] ::- ([T_f32] _> [T_f64]))) /\
-(! c w1 w2 sx. (c |- [Convert w1 sx w2] ::- ([Tv Ki w2] _> [Tv Ki w1]))) /\
-(! c t . (c |- [Reinterpret t] ::- ([other_kind t] _> [t]))) /\
+(! c. (c |- [Conversion Wrap] ::- ([T_i64] _> [T_i32]))) /\
+(! c sx. (c |- [Conversion (Extend sx)] ::- ([T_i32] _> [T_i64]))) /\
+(! c w1 w2 sx. (c |- [Conversion (Trunc t1 sx t2)] ::- ([Tv Kf w2] _> [Tv Ki w1]))) /\
+(! c. (c |- [Conversion Demote] ::- ([T_f64] _> [T_f32]))) /\
+(! c. (c |- [Conversion Promote] ::- ([T_f32] _> [T_f64]))) /\
+(! c w1 w2 sx. (c |- [Conversion (Convert w1 sx w2)] ::- ([Tv Ki w2] _> [Tv Ki w1]))) /\
+(! c t . (c |- [Conversion (Reinterpret t)] ::- ([other_kind t] _> [t]))) /\
 (* 3.3.2.1 - 3.3.2.2. *)
 (! c t . c |- [Drop] ::- consumes [t]) /\
 (! c t . c |- [Select] ::- [t; t; T_i32] _> [t]) /\
