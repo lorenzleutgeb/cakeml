@@ -17,28 +17,26 @@
  * original document. However, some exceptions were
  * made to have all definitions "straight forward".
  * These exceptions are marked with comments.
- *
- * This theory contains the syntactic definitions, mostly
- * from Chapter 2 of the spec.
  *)
 
-open HolKernel boolLib Parse bossLib wordsTheory binary_ieeeTheory integer_wordLib arithmeticTheory
+open HolKernel boolLib Parse bossLib wordsTheory binary_ieeeTheory arithmeticTheory
 
 val _ = ParseExtras.tight_equality()
 
 val _ = new_theory "wasmLang"
 
-val _ = Datatype `ne_list = Base 'a | Conz 'a ne_list`
+(* Type for nonempty lists. *)
+val _ = Datatype `nlist = NBASE 'a | NCONS 'a nlist`
 
 val to_list_def = Define `
-  (to_list (Base a) = [a]) /\
-  (to_list (Conz a y) = (a :: (to_list y)))`
+  (to_list (NBASE a)   = CONS a NIL) /\
+  (to_list (NCONS a y) = CONS a (to_list y))`
 
-val ne_list_last_length = store_thm(
-  "ne_list_last_length",
-  ``!(isne: 'a ne_list). (to_list isne) <> []``,
+val nlist_last_length = store_thm(
+  "nlist_last_length",
+  ``!isne. (to_list isne) <> []``,
   Cases_on `isne` >> rw[to_list_def]
-);
+)
 
 (* 2  Structure *)
 
@@ -46,8 +44,7 @@ val ne_list_last_length = store_thm(
  * A^n is translated as A list
    TODO: For the vector type below, this means that maximum length is not enforced!
  * A^* is translated as A list
- * A^+ is translated as A list
-   TODO: For some occurrence below, this means that minimum length is not enforced!
+ * A^+ is translated as A nlist
  * A^? is translated as A option
  *)
 
@@ -75,7 +72,7 @@ val _ = type_abbrev("name", ``:(codepoint list)``)
 (* 2.3.1  Value Types *)
 (* The spec defines {i,f}{32,64} as atomic types. We separate along "kind"
  * (integer or float) as well as "width" (32bit or 64bit) to have a little
- * more control over parts where the spec resorts to meta-level replacements.
+ * more control over parts where the spec resorts to meta language.
  *)
 val _ = Datatype `kind  = Ki  | Kf`
 val _ = Datatype `width = W32 | W64`
@@ -174,10 +171,8 @@ val _ = Datatype `funop = Negf | Absf | Ceilf | Floorf | Truncf | Nearestf | Sqr
 val _ = Datatype `fbinop = Addf | Subf | Mulf | Divf | Min | Max | Copysign`
 
 val _ = Datatype `itestop = Eqz`
-
-val _ = Datatype `irelop = Eq | Ne | Lt sx | Gt sx | Le sx | Ge sx`
-
-val _ = Datatype `frelop = Eqf | Nef | Ltf | Gtf | Lef | Gef`
+val _ = Datatype ` irelop = Eq  | Ne  | Lt  sx | Gt  sx | Le  sx | Ge  sx`
+val _ = Datatype ` frelop = Eqf | Nef | Ltf    | Gtf    | Lef    | Gef`
 
 (* All conversions grouped. *)
 val _ = Datatype `conv =
@@ -202,7 +197,7 @@ val _ = type_abbrev( "localidx", ``:word32``)
 val _ = type_abbrev( "labelidx", ``:word32``)
 
 (* 4.2.1  Values *)
-(* Moved up since frame depends on val. *)
+(* Moved up since instr depends on val. *)
 val _ = Datatype `val = V_i32 word32 | V_i64 word64 | V_f32 ((8, 23) float) | V_f64 ((11, 52) float)`
 
 val typeof_def = Define `
@@ -210,45 +205,6 @@ val typeof_def = Define `
 (!x. typeof (V_i64 x) = T_i64) /\
 (!x. typeof (V_f32 x) = T_f32) /\
 (!x. typeof (V_f64 x) = T_f64)`
-
-(* 4.2.4  Addresses *)
-(* https://www.w3.org/TR/2018/WD-wasm-core-1-20180215/#addresses%E2%91%A0 *)
-(* Moved up since externval needs addrs. *)
-val _ = type_abbrev(      "addr", ``:num``)
-val _ = type_abbrev(  "funcaddr", ``:addr``)
-val _ = type_abbrev( "tableaddr", ``:addr``)
-val _ = type_abbrev(   "memaddr", ``:addr``)
-val _ = type_abbrev("globaladdr", ``:addr``)
-
-(* 4.2.11  External Values *)
-(* Moved up since exportinst needs externval. *)
-val _ = Datatype `
-  externval =
-    | Func     funcaddr
-    | Table   tableaddr
-    | Mem       memaddr
-    | Global globaladdr`
-
-(* TODO: 4.2.11.1  Conventions *)
-
-(* 4.2.10  Export Instances *)
-(* Moved up since moduleinst needs exportinst. *)
-val _ = Datatype `exportinst = <| name: name; value: externval |>`
-
-(* 4.2.5  Module Instances *)
-(* Moved up since funcinst needs moduleinst. *)
-val _ = Datatype `moduleinst =
-  <| types      :   functype list
-   ; funcaddrs  :   funcaddr list
-   ; tableaddrs :  tableaddr list
-   ; memaddrs   :    memaddr list
-   ; globaladdrs: globaladdr list
-   ; exports    : exportinst list
-   |>`
-
-(* 4.2.12.3  Frames *)
-(* Moved up since instr depends on frame. *)
-val _ = Datatype `frame = <| locals: val list; module: moduleinst |>`
 
 val _ = Datatype `
   instr =
@@ -285,21 +241,18 @@ val _ = Datatype `
     | If    resulttype (instr list) (instr list)
     | Br    labelidx
     | Br_if labelidx
-    (* TODO: labelidx vec should be nonempty! *)
-    | Br_table (labelidx vec) labelidx
+    | Br_table (labelidx nlist) labelidx
     | Return
     | Call funcidx
-    | Call_indirect typeidx
-(* 4.2.13  Administrative Instructions *)
-    | Trap
-    | Invoke funcaddr
-    | Init_elem tableaddr u32 (funcidx list)
-    | Init_data memaddr u32 (byte list)
-    | Label num (instr list) (instr list)
-    | Frame num frame (instr list)`
+    | Call_indirect typeidx`
 
-(* To check whether an instr encodes a val. *)
-val is_val_def = Define `is_val (Const v) = T`
+(* Shortcuts for constants *)
+
+val ci32_def = Define `ci32 = Const o V_i32`
+val ci64_def = Define `ci64 = Const o V_i64`
+
+val cf32_def = Define `cf32 = Const o V_f32`
+val cf64_def = Define `cf64 = Const o V_f64`
 
 (* 2.4.6  Expressions *)
 val _ = Datatype `expr = Expr (instr list)`
