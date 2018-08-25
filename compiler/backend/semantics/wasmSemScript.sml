@@ -32,20 +32,45 @@ val _ = new_theory "wasmSem"
 (* 4.2  Runtime Structure *)
 
 (* 4.2.2  Results *)
-(* NOTE: Stricly, the spec defines the first case as a val list. However, it states
- * that currently a result can consist of at most one value.
- * We model this as an option type:
- *   SOME v  means that the outcome of a computation is v
- *   NONE    means that the the outcome of a computation is a trap
- * The issue that tracks multi-value returns is at
- *   https://github.com/WebAssembly/design/issues/1146
+(* NOTE: The spec currently says that this list can have at most one
+ *       element. However it notes that this restriction might be lifted
+ *       in the future.
+ *       The issue that tracks multi-value returns is at
+ *        https://github.com/WebAssembly/design/issues/1146
  *)
-val _ = type_abbrev("result", ``:val option``)
+val _ = type_abbrev("result", ``:val list``)
 
-val mk_result_def = Define `mk_result [Const v] = SOME v /\ mk_result [Trap] = NONE`
+(* 4.2.4  Addresses *)
+(* https://www.w3.org/TR/2018/WD-wasm-core-1-20180215/#addresses%E2%91%A0 *)
+(* Moved up since externval needs addrs. *)
+val _ = type_abbrev(      "addr", ``:num``)
+val _ = type_abbrev(  "funcaddr", ``:addr``)
+val _ = type_abbrev( "tableaddr", ``:addr``)
+val _ = type_abbrev(   "memaddr", ``:addr``)
+val _ = type_abbrev("globaladdr", ``:addr``)
+
+(* 4.2.11  External Values *)
+val _ = Datatype `
+  externval =
+    | Func     funcaddr
+    | Table   tableaddr
+    | Mem       memaddr
+    | Global globaladdr`
+
+(* 4.2.10  Export Instances *)
+val _ = Datatype `exportinst = <| name: name; value: externval |>`
+
+(* 4.2.5  Module Instances *)
+val _ = Datatype `moduleinst =
+ <| types      :   functype list
+  ; funcaddrs  :   funcaddr list
+  ; tableaddrs :  tableaddr list
+  ; memaddrs   :    memaddr list
+  ; globaladdrs: globaladdr list
+  ; exports    : exportinst list
+  |>`
 
 (* 4.2.6  Function Instances *)
-(* Moved up since store needs funcinst. *)
 
 (* NOTE: Host Functions are not explicitly defined in the spec. We use them
  *       as a vehicle to index a collection of host functions that live
@@ -57,27 +82,24 @@ val mk_result_def = Define `mk_result [Const v] = SOME v /\ mk_result [Trap] = N
 val _ = type_abbrev("hostfunc", ``:string``)
 
 val _ = Datatype `
-  funcinst =
-(* <| type: functype; module: moduleinst; code: func |> *)
-    | Native functype moduleinst func
-(* <| type: functype; hostcode hostfunc |> *)
-    | Host   functype hostfunc`
+funcinst =
+   (* <| type: functype; module: moduleinst; code: func |> *)
+   | Native functype moduleinst func
+   (* <| type: functype; hostcode hostfunc |> *)
+   | Host   functype hostfunc`
 
 val funcinst_type_def = Define `funcinst_type (Native tf mi f) = tf /\ funcinst_type (Host tf hf) = tf`
 
 (* 4.2.7  Table Instances *)
-(* Moved up since store needs tableinst. *)
 val _ = type_abbrev("funcelem", ``:(funcaddr option)``)
 val _ = Datatype `tableinst = <| elem: funcelem list; max: u32 |>`
 
 (* 4.2.8  Memory Instances *)
-(* Moved up since store needs meminst. *)
 val _ = Datatype `meminst = <| data: byte vec; max: u32 |>`
 val _ = Define `page_size = 65536n`
 val _ = Define `bytes_to_pages x = x DIV page_size`
 
 (* 4.2.9  Global Instances *)
-(* Moved up since store needs globalinst. *)
 val _ = Datatype `globalinst = <| value: val; mut: mut |>`
 
 (* 4.2.3  Store *)
@@ -88,14 +110,11 @@ val _ = Datatype `store =
    ; globals: globalinst list
    |>`
 
-(* 4.2.4  Adresses [moved to wasmLang] *)
-(* 4.2.5  Module Instances [moved to wasmLang] *)
-(* 4.2.6  Functions Instances [moved to wasmLang] *)
-(* 4.2.7  Table Instances [moved-up] *)
-(* 4.2.8  Memory Instances [moved-up] *)
-(* 4.2.9  Global Instances [moved-up] *)
-(* 4.2.10  Export Instances [moved to wasmLang] *)
-(* 4.2.11  External Values [moved to wasmLang] *)
+(* TODO: 4.2.11.1  Conventions *)
+
+(* 4.2.12.3  Frames *)
+(* Moved up since instr depends on frame. *)
+val _ = Datatype `frame = <| locals: val list; module: moduleinst |>`
 
 (* 4.2.12.2  Labels *)
 (* There is no necessity for a separate label type. *)
@@ -105,30 +124,39 @@ val _ = Datatype `store =
 (* Definition of frame was moved to wasmLang. *)
 val _ = Datatype `activation = Activation num frame`
 
-(* 4.2.13  Administrative Instructions [moved to wasmLang] *)
+(* 4.2.13  Administrative Instructions *)
+val _ = Datatype `
+  ainstr =
+    | Plain instr
+    | Trap
+    | Invoke funcaddr
+    | Init_elem tableaddr u32 (funcidx list)
+    | Init_data memaddr u32 (byte list)
+    | Label num (instr list) (instr list)
+    | Frame num frame (instr list)`
 
 (* 4.2.13.1  Block Contexts *)
 (* Parameters of the constructors x are indicated as <x>. *)
 val _ = Datatype `
   block =
 (* B^0 ::= <val*> [_] <instr*> *)
-    | B0 (val list) (instr list)
-(* B^(k+1) ::= <val*> label_<n> { <instr*> } B^k end <instr*> *)
-    | Bk (val list) num (instr list) block (instr list)`
+    | B0 result (ainstr list)
+(* B^(k+1) ::= <val*> label_<n> { <ainstr*> } B^k end <instr*> *)
+    | Bk result num (ainstr list) block (ainstr list)`
 
 val fill_b_def = Define `
 fill_b 0n (B0 vs is)          filler = MAP Const vs ++ filler ++ is /\
 fill_b k  (Bk vs n i1s b i2s) filler = MAP Const vs ++ [Label n i1s (fill_b (k - 1n) b filler)] ++ i2s`
 
 (* 4.2.13.2  Configurations *)
-val _ = Datatype `thread = Thread frame (instr list)`
+val _ = Datatype `thread = Thread frame result (ainstr list)`
 val _ = Datatype `config = Config store thread`
 
 (* The above definitions of threads and configs from the spec is
  * a bit heavy. We introduce triples as a shorthand notation, as
  * used in the spec.
  *)
-val _ = type_abbrev("configuration", ``:(store # frame # (instr list))``)
+val _ = type_abbrev("configuration", ``:(store # frame # (result # (ainstr list)))``)
 
 (* To model host functions that mutate the store, we wrap the
  * confugiration once again into a structure that references host functions.
@@ -136,7 +164,7 @@ val _ = type_abbrev("configuration", ``:(store # frame # (instr list))``)
  * invoked. The small step semantics in the wasm specification is simply
  * lifted to this case.
  *)
-val _ = type_abbrev("hostfuncimpl", ``:store -> (val list) -> (store # result)``)
+val _ = type_abbrev("hostfuncimpl", ``:store -> result -> (store # result)``)
 
 (* FFI Calls: A hostfunc is a string, which just names the foreign function.
  * This string is passed to call_ffi and further to the oracle.
@@ -154,12 +182,21 @@ val _ = type_abbrev("hostfuncimpl", ``:store -> (val list) -> (store # result)``
  * Note that the second memory region is modified in place, i.e. the wrapping code must
  * store the result obtained from the oracle in the memory at addres ptr2.
  *)
+
+(* For integration with CakeML we define a state which subsumes a configuration,
+ * since it contains a store and the the (intermediate) result and stack of the
+ * only thread.
+ * Once threads become available in WebAssembly, see
+ *  https://github.com/WebAssembly/threads
+ * one may want to add this indirection here by moving frame, result and stack
+ * into a separate collection, and adding events. C.f. also the datatype config. *)
 val _ = Datatype `
   state =
     <| ffi: 'ffi ffi_state
      ; store: store
+     ; result: result
      ; frame: frame
-     ; stack: (instr list)
+     ; stack: (ainstr list)
      ; clock: num
      |>`
 
@@ -171,9 +208,9 @@ val _ = Datatype `
 (* [_] *)
     | E0
 (* <val*> <E> <instr*> *)
-    | Ex (val list) e (instr list)
+    | Ex result e (ainstr list)
 (* label_<n> { <instr*> } <E> end *)
-    | Ey num (instr list) e`
+    | Ey num (ainstr list) e`
 
 val fill_e_def = Define `
 fill_e E0           filler = filler /\
@@ -288,19 +325,9 @@ cvt (Convert W64 U W64) (V_i64 v) = SOME ((V_f64 o real_to_float roundTiesToEven
 cvt (Convert W32 S W64) (V_i64 v) = SOME ((V_f32 o real_to_float roundTiesToEven o real_of_int o w2i) v) /\
 cvt (Convert W64 S W64) (V_i64 v) = SOME ((V_f64 o real_to_float roundTiesToEven o real_of_int o w2i) v) /\
 cvt Demote (V_f64 v) = SOME ((V_f32 o real_to_float roundTiesToEven o float_to_real) v) /\
-cvt Promote (V_f32 v) = SOME ((V_f64 o real_to_float roundTiesToEven o float_to_real) v) /\
+cvt Promote (V_f32 v) = SOME ((V_f64 o real_to_float  roundTiesToEven o float_to_real) v) /\
 cvt (Reinterpret t) v = SOME ((bytes2val (other_kind (typeof v)) o val2bytes) v)
 `
-
-(*
-val _ = Define `
- opt_word x sx = (case x of SOME y => SOME (case sx of U => x | S => ) | _ => NONE)`
-
-val _ = Define `float_incomp x y = (float_compare x y = UN)`
-
-val _ = Define `float_strange x = float_incomp x x`
-
-*)
 
 (* Some functions that define the semantics of instructions return an option.
  * Generally, if they return NONE, then this corresponds to a trap in wasm.
@@ -349,6 +376,5 @@ val mem_write_def = Define `mem_write m i ma n v =
 `
 
 val consts_def = Define `consts v = MAP (Const o v)`
-
 
 val _ = export_theory()
