@@ -34,7 +34,7 @@ val _ = new_theory "wasmRelSem"
 
 (* NOTE: We define a number of reduction relations:
  *
- *       (instr list) -s-> (instr list)  (from "simple")
+ *       result # (instr list) -s-> result # (instr list)  (from "simple")
  *       For rules that do not depend on the current store/frame
  *       but only operate on the stack.
  *
@@ -56,6 +56,8 @@ val _ = new_theory "wasmRelSem"
  * separately and lift them to the more general case
  * afterwards.
  *)
+
+val is_val_def = Define `is_val i = case i of Const v => T | _ => F`
 
 (* 4.4  Instructions *)
 val _ = set_mapped_fixity {
