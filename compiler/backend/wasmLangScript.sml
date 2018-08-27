@@ -229,8 +229,12 @@ val _ = Datatype `
     | Get_global globalidx
     | Set_global globalidx
 (* 2.4.4  Memory Instructions *)
-    | Load valtype  ((tp # sx) option) memarg
-    | Store valtype ( tp       option) memarg
+    (* Load and Store use the full width and are applicable to both floats and integers. *)
+    | Load   valtype       memarg
+    | Store  valtype       memarg
+    (* Loadi and Storei are only applicable to integers and use reduced width through tp. *)
+    | Loadi  width   tp sx memarg
+    | Storei width   tp    memarg
     | Current_memory
     | Grow_memory
 (* 2.4.5  Control Instructions *)
@@ -256,6 +260,9 @@ val cf64_def = Define `cf64 = Const o V_f64`
 
 (* 2.4.6  Expressions *)
 val _ = Datatype `expr = Expr (instr list)`
+
+(* TODO: Think about whether we actually need a separate Expr type... *)
+val expr_to_instrs = Define `expr_to_instrs (Expr instrs) = instrs`
 
 (* 2.5  Modules *)
 (* The definition of module is at the end of the section. *)

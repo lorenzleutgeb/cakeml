@@ -70,32 +70,40 @@ val _ = Datatype `moduleinst =
   ; exports    : exportinst list
   |>`
 
-(* 4.2.6  Function Instances *)
-
-(* NOTE: Host Functions are not explicitly defined in the spec. We use them
- *       as a vehicle to index a collection of host functions that live
- *       outside the wasm store. The actual host function is then able to
- *       consume the wasm store and create a new one (conforming with the
- *       constraints on host functions mentioned in section 4.4.7.3 and
- *       formalized in section 7.5.2.3.
+(* 4.2.6  Function Instances
+ *
+ * NOTE: For CakeML, host functions coincide with foreign functions:
+ *
+ * To refer to the foreign function that implements a given host function
+ * (when invoking call_ffi) we need its name: Using `:string` as `:hostfunc`
+ * suits.
+ *
+ * The two input parameters (both of type (word8 list)) are to be passed via the stack,
+ * just as with a normal invocation, this is specified in 4.4.7.3. However, we need to
+ * fix a representation of an array. In other languages (wordLang and stackLang) this
+ * is done by specifying an address (pointer) and the length.
+ * This implies that any host function in our setting has a function type of:
+ *
+ *             ptr1   len1   ptr2   len2
+ *   consumes [T_i32; T_i32; T_i32; T_i32]
+ *
+ * The second memory region is modified in place.
  *)
-val _ = type_abbrev("hostfunc", ``:string``)
-
 val _ = Datatype `
 funcinst =
-   (* <| type: functype; module: moduleinst; code: func |> *)
    | Native functype moduleinst func
-   (* <| type: functype; hostcode hostfunc |> *)
-   | Host   functype hostfunc`
+   | Host   string`
 
-val funcinst_type_def = Define `funcinst_type (Native tf mi f) = tf /\ funcinst_type (Host tf hf) = tf`
+val funcinst_type_def = Define `
+funcinst_type (Native tf m f) = tf /\
+funcinst_type (Host s)        = Tf [T_i32; T_i32; T_i32; T_i32] []`
 
 (* 4.2.7  Table Instances *)
 val _ = type_abbrev("funcelem", ``:(funcaddr option)``)
 val _ = Datatype `tableinst = <| elem: funcelem list; max: u32 |>`
 
 (* 4.2.8  Memory Instances *)
-val _ = Datatype `meminst = <| data: byte vec; max: u32 |>`
+val _ = Datatype `meminst = <| data: byte vec; max: u32 option |>`
 val _ = Define `page_size = 65536n`
 val _ = Define `bytes_to_pages x = x DIV page_size`
 
@@ -110,17 +118,8 @@ val _ = Datatype `store =
    ; globals: globalinst list
    |>`
 
-(* TODO: 4.2.11.1  Conventions *)
-
 (* 4.2.12.3  Frames *)
 val _ = Datatype `frame = <| locals: val list; module: moduleinst |>`
-
-(* 4.2.12.2  Labels *)
-(* There is no necessity for a separate label type. *)
-(* val _ = Datatype `label = T_Label num (instr list)` *)
-
-(* 4.2.12.3  Frames *)
-val _ = Datatype `activation = Activation num frame`
 
 (* 4.2.13  Administrative Instructions *)
 
@@ -135,25 +134,13 @@ val _ = Datatype `
     | Init_elem tableaddr u32 (funcidx list)
     | Init_data   memaddr u32 (   byte list)
 
-    | Label num (instr list) code
-    | Frame num frame        code
-
-    (* NOTE: The following two are not in the spec but
-     * ease specification of Return/Br bubbling up
-     * through labels. *)
-    | Bring num result
-    | Returning result
-    ;
-
-  (* NOTE: The following is not in the spec. The first
-  * parameter represents the (maybe ufinished) result
-  * and the second parameter the instructions that
-  * still have to be executed. The result is final
-  * when the second parameter is empty*)
-  code = Code result (ainstr list)
+    | Label num (instr list) (result # (ainstr list))
+    | Frame num frame        (result # (ainstr list))
 `
 
-val push_code_def = Define `push_code (Code vs1 es1) (Code vs2 es2) = (Code (vs2 ++ vs1) (es2 ++ es1))`
+val _ = type_abbrev("code", ``:(result # (ainstr list))``)
+
+val push_code_def = Define `push_code (vs1, es1) (vs2, es2) = ((vs2 ++ vs1), (es2 ++ es1))`
 
 (* 4.2.13.1  Block Contexts *)
 (* Parameters of the constructors x are indicated as <x>. *)
@@ -166,7 +153,7 @@ val _ = Datatype `
 
 val fill_b_def = Define `
 fill_b 0n (B0 c)              filler = push_code c filler /\
-fill_b k  (Bk vs n i1s b i2s) filler = Code vs ([Label n i1s (fill_b (k - 1n) b filler)] ++ i2s)`
+fill_b k  (Bk vs n i1s b i2s) filler = (vs, ([Label n i1s (fill_b (k - 1n) b filler)] ++ i2s))`
 
 (* 4.2.13.2  Configurations *)
 val _ = Datatype `thread = Thread frame code`
@@ -184,37 +171,13 @@ val _ = Datatype `
 
 val fill_e_def = Define `
 fill_e  E0            filler = filler /\
-fill_e (Ex   vs e es) filler = push_code (Code vs es) (fill_e e filler) /\
-fill_e (Ey n es e   ) filler = (Code [] [Label n es (fill_e e filler)])`
+fill_e (Ex   vs e es) filler = push_code (vs, es) (fill_e e filler) /\
+fill_e (Ey n es e   ) filler = ([], [Label n es (fill_e e filler)])`
 
 (* The above definitions of threads and configs from the spec is
  * a bit heavy. We introduce triples as a shorthand notation, as
  * used in the spec. *)
 val _ = type_abbrev("configuration", ``:(store # frame # (result # (ainstr list)))``)
-
-(* To model host functions that mutate the store, we wrap the
- * configuration once again into a structure that references host functions.
- * Over this structure we can model what happens when a host function is
- * invoked. The small step semantics in the wasm specification is simply
- * lifted to this case. *)
-val _ = type_abbrev("hostfuncimpl", ``:store -> result -> (store # result)``)
-
-(* FFI Calls: A hostfunc is a string, which just names the foreign function.
- * This string is passed to call_ffi and further to the oracle.
-
- * Oracle operations need to be wrapped a bit.
- * The two input parameters (both of type (word8 list)) are to be passed via the stack,
- * just as with a normal invocation, this is specified in 4.4.7.3. However, we need to
- * fix a representation of an array. In other languages (wordLang and stackLang) this
- * is done by specifying an address (pointer) and the length.
- * This would mean that any foreign function in our setting would have a wasm function
- * type of:
- *             ptr1   len1   ptr2   len2
- *   consumes [T_i32; T_i32; T_i32; T_i32]
- *
- * Note that the second memory region is modified in place, i.e. the wrapping code must
- * store the result obtained from the oracle in the memory at addres ptr2.
- *)
 
 (* For integration with CakeML we define a state which subsumes a configuration,
  * since it contains a store and the the (intermediate) result and stack of the
@@ -222,7 +185,7 @@ val _ = type_abbrev("hostfuncimpl", ``:store -> result -> (store # result)``)
  * Once threads become available in WebAssembly, see
  *  https://github.com/WebAssembly/threads
  * one may want to add this indirection here by moving frame and code
- * into a separate collection, and adding events. C.f. also the datatype config. *)
+ * into a separate collection, and adding events. *)
 val _ = Datatype `
   state =
     <| ffi:   'ffi ffi_state
@@ -232,7 +195,7 @@ val _ = Datatype `
      ; clock: num
      |>`
 
-val mk_config_def = Define `mk_config (s, f, vs, is) = Config s (Thread f (Code vs is))`
+val mk_config_def = Define `mk_config (s, f, vs, is) = Config s (Thread f (vs, is))`
 
 (* 4.3  Numerics *)
 (* 4.3.2  Integer Operations *)
@@ -350,7 +313,7 @@ cvt (Reinterpret t) v = SOME ((bytes2val (other_kind (typeof v)) o val2bytes) v)
  * In wasm, booleans are represented by the two constants i32.const 0 and
  * i32.const 1, which we get by applying this wrapping function.
  *)
-val wrap_bool = Define `wrap_bool T = ci32 1w /\ wrap_bool F = ci32 0w`
+val wrap_bool = Define `wrap_bool T = V_i32 1w /\ wrap_bool F = V_i32 0w`
 
 val wraps_false_def = Define `
 wraps_false v = case v of (V_i32 0w) => T | _ => F`
@@ -360,27 +323,32 @@ val arguments_ok = Define `arguments_ok vs (Tf ts rt) = LIST_REL (\v t. t = type
 val zero_def = Define `
 zero T_i32 = V_i32 0w /\
 zero T_i64 = V_i64 0w /\
-zero T_f32 = V_f32 <|Sign := 0w; Exponent := 0w; Significand := 0w|> /\
-zero T_f64 = V_f64 <|Sign := 0w; Exponent := 0w; Significand := 0w|>`
+zero T_f32 = V_f32 <| Sign := 0w; Exponent := 0w; Significand := 0w |> /\
+zero T_f64 = V_f64 <| Sign := 0w; Exponent := 0w; Significand := 0w |>`
 
 val has_def = Define `has xs i x = (i < (LENGTH xs) /\ EL i xs = x)`
-val mem0_def = Define `mem0 s f = (EL (HD f.module.memaddrs) s.mems)`
 
-val mem_range = Define `mem_range m i ma n =
-  let ea = w2n ((word_add i ma.offset):i32); len = (n DIV 8) in
-    if (LENGTH m.data) <= ea + len then NONE
-    else                                SOME (ea, len)`
+(* These are handy as long as there is only one mem/table. *)
+val memaddr_def = Define `memaddr f = HD f.module.memaddrs`
+val get_mem_def = Define `get_mem s f = (EL (memaddr f) s.mems).data`
+val set_mem_def = Define `set_mem s f m = let a = memaddr f in s with mems := LUPDATE ((EL a s.mems) with data := m) a s.mems`
+val tableaddr_def = Define `tableaddr f = HD f.module.tableaddrs`
+val get_table_def = Define `get_table s f = (EL (tableaddr f) s.tables).elem`
 
-(* Helper to read from a memory instance m, given the index i,
- * the memarg ma and the with n. Returns SOME (byte list) in
- * case the read is within bounds of m or else NONE.
- *)
-val mem_read_def = Define `mem_read m i ma n =
-  OPTION_MAP (\ (ea, n). (GENLIST (\i. EL (ea + i) m.data) n)) (mem_range m i ma n)
-`
+val IF_SOME_def = Define `IF_SOME T x = SOME x /\ IF_SOME F x = NONE`
+val LUPDATE_MAP_def = Define `LUPDATE_MAP f n l = LUPDATE (f (EL n l)) n l`
 
-val mem_write_def = Define `mem_write m i ma n v =
-  OPTION_MAP (\ (ea, n). (GENLIST (\i. if i < ea \/ ea + n < i then EL i m.data else EL (i - ea) (val2bytes v)) (LENGTH m.data)))
-`
+val read_mem_def = Define `
+  read_mem s f ptr len = let m = get_mem s f in IF_SOME (LENGTH m < ptr + len) (TAKE len (DROP ptr m))`
+
+val write_mem_def = Define `
+  write_mem s f ptr bs = let m = get_mem s f; len = LENGTH bs in IF_SOME (LENGTH m < ptr + len)
+    (s with mems := LUPDATE_MAP (\m0. m0 with data := (TAKE ptr m) ++ bs ++ (DROP (ptr + len) m)) (memaddr f) s.mems)`
+
+(* NOTE: memarg.align does not affect the semantics, see note at 4.4.4. *)
+val mem_range = Define `mem_range i ma n = ((w2n i) + (w2n ma.offset), n DIV 8)`
+
+val mem_load_def = Define `mem_load s f (V_i32 i) ma n = let (ptr, len) = mem_range i ma n in read_mem s f len ptr`
+val mem_store_def = Define `mem_store s f (V_i32 i) ma n bs = let (ptr, len) = mem_range i ma n in write_mem s f ptr bs`
 
 val _ = export_theory()
