@@ -164,9 +164,9 @@ val _ = Datatype `
 (* B^(k+1) ::= <val*> label_<n> { <ainstr*> } B^k end <instr*> *)
     | Bk result num (instr list) block (ainstr list)`
 
-val fill_b_code_def = Define `
-fill_b_code 0n (B0 c)              filler = push_code c filler /\
-fill_b_code k  (Bk vs n i1s b i2s) filler = Code vs ([Label n i1s (fill_b_code (k - 1n) b filler)] ++ i2s)`
+val fill_b_def = Define `
+fill_b 0n (B0 c)              filler = push_code c filler /\
+fill_b k  (Bk vs n i1s b i2s) filler = Code vs ([Label n i1s (fill_b (k - 1n) b filler)] ++ i2s)`
 
 (* 4.2.13.2  Configurations *)
 val _ = Datatype `thread = Thread frame code`
@@ -178,14 +178,14 @@ val _ = Datatype `
     (* [_] *)
     | E0
     (* <val*> <E> <instr*> *)
-    | Ex result e (ainstr list)
+    | Ex result           e (ainstr list)
     (* label_<n> { <instr*> } <E> end *)
     | Ey num (instr list) e`
 
-val fill_e_code_def = Define `
-fill_e_code  E0            filler = filler /\
-fill_e_code (Ex   vs e es) filler = push_code (Code vs es) (fill_e_code e filler) /\
-fill_e_code (Ey n es e   ) filler = (Code [] [Label n es (fill_e_code e filler)])`
+val fill_e_def = Define `
+fill_e  E0            filler = filler /\
+fill_e (Ex   vs e es) filler = push_code (Code vs es) (fill_e e filler) /\
+fill_e (Ey n es e   ) filler = (Code [] [Label n es (fill_e e filler)])`
 
 (* The above definitions of threads and configs from the spec is
  * a bit heavy. We introduce triples as a shorthand notation, as
@@ -350,6 +350,8 @@ cvt (Reinterpret t) v = SOME ((bytes2val (other_kind (typeof v)) o val2bytes) v)
  * In wasm, booleans are represented by the two constants i32.const 0 and
  * i32.const 1, which we get by applying this wrapping function.
  *)
+val wrap_bool = Define `wrap_bool T = ci32 1w /\ wrap_bool F = ci32 0w`
+
 val wraps_false_def = Define `
 wraps_false v = case v of (V_i32 0w) => T | _ => F`
 
