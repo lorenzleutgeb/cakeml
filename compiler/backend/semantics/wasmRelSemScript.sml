@@ -22,44 +22,50 @@
  * from Chapter 4 of the spec.
  *)
 
-open HolKernel boolLib Parse bossLib wordsTheory binary_ieeeTheory integer_wordLib arithmeticTheory wasmSemTheory patternMatchesLib
+open preamble wasmSemanticPrimitivesTheory
 
 val _ = patternMatchesLib.ENABLE_PMATCH_CASES()
-
 val _ = ParseExtras.tight_equality()
 
 val _ = new_theory "wasmRelSem"
+
+val _ = Datatype `
+  state =
+    <| ffi: 'ffi ffi_state
+     ; store:   store
+     ; frame:   frame
+     ; code:    code
+     ; result: (result option)
+     |>`
 
 (* 4  Execution *)
 
 (* NOTE: We define a number of reduction relations:
  *
- *       result # (instr list) -s-> result # (instr list)  (from "simple")
+ *       -s-> (from "simple")
  *       For rules that do not depend on the current store/frame
  *       but only operate on the stack.
  *
- *       configuration ---> configuration
+ *       -n-> (from "native")
  *       For rules that do depend on the current store/frame.
  *       This relation is the main one from the spec.
  *
- *       state -c-> state  (from "complex")
+ *       ---> and its refl. trans. closure --->*
  *       For rules that call host functions, to avoid a
  *       circular dependency between store and hostfunc.
  *
  *       expr -e->  expr  (from "expression")
- *       Similar to -s->.
+ *       Similar to --->.
  *)
 
-(* Many steps operate only on the list of instructions
- * of the current thread. Since for these cases we do
- * not care about store and frame, we write them down
- * separately and lift them to the more general case
- * afterwards.
- *)
+val wrap_option_def = Define `
+wrap_option  NONE    msg vs es = (     vs, es, SOME (Trap msg)) /\
+wrap_option (SOME v) msg vs es = (v :: vs, es, NONE           )`
 
-val is_val_def = Define `is_val i = case i of Const v => T | _ => F`
+val fine_def = Define `fine vs es = (vs, es, NONE)`
 
 (* 4.4  Instructions *)
+
 val _ = set_mapped_fixity {
   fixity    = Infix(NONASSOC, 450),
   tok       = "-s->",
@@ -71,108 +77,122 @@ val _ = set_mapped_fixity {
   term_name = "step_simple"
 }
 val (step_simple_rules, step_simple_cases, step_simple_ind) = Hol_reln `
-(* 4.2.13.3 *)
-(!e. e <> E0 ==> fill_e e [Trap] -s-> [Trap]) /\
-(!n f. [Frame n f [Trap]] -s-> [Trap]) /\
 (* 4.4.1.2 *)
-(!op v c. v = V_i32 c ==>
-  [Const v; Unop_i W32 op] -s-> [Const (V_i32 (app_unop_i op c))]
-) /\
-(!op v c. v = V_i64 c ==>
-  [Const v; Unop_i W64 op] -s-> [Const (V_i64 (app_unop_i op c))]
-) /\
-(!op v c. v = V_f32 c ==>
-  [Const v; Unop_f W32 op] -s-> [Const (V_f32 (app_unop_f op c))]
-) /\
-(!op v c. v = V_f64 c ==>
-  [Const v; Unop_f W64 op] -s-> [Const (V_f64 (app_unop_f op c))]
-) /\
+(!vs es c op. (V_i32 c :: vs, Unop_i W32 op, es) -s-> (fine ((V_i32 (app_unop_i op c)) :: vs) es)) /\
 (* 4.4.1.3 *)
-(!op c1 c2.
-    (consts V_i32 [c1; c2]) ++ [Binop_i W32 op]
+(!vs es c1 c2 op.
+    (V_i32 c1 :: V_i32 c2 :: vs, Binop_i W32 op, es)
   -s->
-    [wrap_option V_i32 (app_binop_i op c1 c2)]
-) /\
-(!op c1 c2.
-    consts V_i64 [c1; c2] ++ [Binop_i W64 op]
-  -s->
-    [wrap_option V_i64 (app_binop_i op c1 c2)]
-) /\
-(!op c1 c2.
-    [Const (V_f32 c1); Const (V_f32 c2); Binop_f W32 op]
-  -s->
-    [wrap_option V_f32 (app_binop_f op c1 c2)]
-) /\
-(!op c1 c2.
-    [Const (V_f64 c1); Const (V_f64 c2); Binop_f W64 op]
-  -s->
-    [wrap_option V_f64 (app_binop_f op c1 c2)]
+    (wrap_option (OPTION_MAP V_i32 (app_binop_i op c1 c2)) "Binary operation without result" vs es)
 ) /\
 (* 4.4.1.4 *)
-(!op c. [Const (V_i32 c); (Testop_i W32 op)] -s-> [wrap_bool (app_testop_i op c)]) /\
-(!op c. [Const (V_i64 c); (Testop_i W64 op)] -s-> [wrap_bool (app_testop_i op c)]) /\
+(!vs es c op. (V_i32 c :: vs, Testop_i W32 op, es) -s-> (fine (wrap_bool (app_testop_i op c) :: vs) es)) /\
 (* 4.4.1.5 *)
-(!op c1 c2.
-    [Const (V_i32 c1); Const (V_i32 c2); Relop_i W32 op]
+(!vs es c1 c2 op.
+    (V_i32 c1 :: V_i32 c2 :: vs, Relop_i W32 op, es)
   -s->
-    [wrap_bool (app_relop_i op c1 c2)]
-) /\
-(!op c1 c2.
-    [Const (V_i64 c1); Const (V_i64 c2); Relop_i W64 op]
-  -s->
-    [wrap_bool (app_relop_i op c1 c2)]
-) /\
-(!op c1 c2.
-    [Const (V_f32 c1); Const (V_f32 c2); Relop_f W32 op]
-  -s->
-    [wrap_bool (app_relop_f op c1 c2)]
-) /\
-(!op c1 c2.
-    [Const (V_f64 c1); Const (V_f64 c2); Relop_f W64 op]
-  -s->
-    [wrap_bool (app_relop_f op c1 c2)]
+    (fine (wrap_bool (app_relop_i op c1 c2) :: vs) es)
 ) /\
 (* 4.4.1.6 *)
-(!c v. [Const v; Conversion c] -s-> [wrap_option (\x.x) (cvt c v)]) /\
+(!vs es v c. (v :: vs, Conversion c, es) -s-> (wrap_option (cvt c v) "Conversion error" vs es)) /\
 (* 4.4.2.1 *)
-(!v. [Const v; Drop] -s-> []) /\
+(!vs es. (v :: vs, Drop, es) -s-> (fine vs es)) /\
 (* 4.4.2.2 *)
-(!v a b. [a; b; wrap_bool v; Select] -s-> [if v then a else b]) /\
+(!vs es a b i. (a :: b :: V_i32 i :: vs, Select, es) -s-> (fine ((if i = 0w then b else a) :: vs) es)) /\
 (* 4.4.3.3 *)
-(!c x. [c; Tee_local x] -s-> [c; c; Set_local x]) /\
+(!vs es v x. (v :: vs, Tee_local x, es) -s-> (fine (v :: v :: vs) (Plain (Set_local x) :: es))) /\
 (* 4.4.5.1 *)
-[Nop] -s-> [] /\
+(!vs es. (vs, Nop, es) -s-> (fine vs es)) /\
 (* 4.4.5.2 *)
-[Unreachable] -s-> [Trap] /\
+(!vs es. (vs, Unreachable, es) -s-> (vs, es, SOME (Trap "Unreachable executed"))) /\
 (* 4.4.5.3 *)
-(!t is. [Block t is] -s-> [Label (LENGTH t) [] is]) /\
+(!vs es t is. (vs, Block t is, es) -s-> (fine vs (Label (LENGTH t) [] ([], MAP Plain is) :: es))) /\
 (* 4.4.5.4 *)
-(!t is. [Loop t is] -s-> [Label 0 [Loop t is] is]) /\
+(!vs es t is. (vs, Loop  t is, es) -s-> (fine vs (Label 0 [Loop t is] ([], MAP Plain is) :: es))) /\
 (* 4.4.5.5 *)
-(!t i1s i2s v.
-  [wrap_bool v; If t is1 is2] -s-> [Label (LENGTH t) [] (if v then i1s else i2s)]
-) /\
-(* 4.4.5.6 *)
-(!is l vs. EVERY is_val vs ==>
-  [Label (LENGTH vs) is (fill_b l holed (vs ++ [Br (n2w l)]))] -s-> vs ++ is
+(!t i1s i2s i.
+  (V_i32 i :: vs, If t is1 is2, es) -s-> (fine vs (Plain (Block t (if i = 0w then i2s else i1s)) :: es))
 ) /\
 (* 4.4.5.7 *)
-(!v l.
-  [wrap_bool v; Br_if l] -s-> (if v then [Br l] else [])
+(!vs es b l.
+  (V_i32 b :: vs, Br_if l, es) -s-> (fine vs ((if b = 0w then [] else [Plain (Br l)]) ++ es))
 ) /\
 (* 4.4.5.8 *)
-(!i ls ln.
-    [Const (V_i32 (n2w i)); Br_table ls ln]
+(!vs es i ls ln.
+    (V_i32 (n2w i) :: vs, Br_table ls ln, es)
   -s->
-    [Br (if i < (LENGTH ls) then (EL i ls) else ln)]
-) /\
-(* 4.4.6.2 *)
-(!n is vs. (EVERY is_val vs) ==> [Label n is vs] -s-> vs) /\
-(* TODO: Conrad Watt also defines the following case. Not sure if needed? *)
-(!n is. [Label n is [Trap]] -s-> [Trap])
+    (fine vs (Plain (Br (if i < LENGTH (to_list ls) then EL i (to_list ls) else ln)) :: es))
+)
 `
 
 (* Now, the steps that involve store and/or frame. *)
+val _ = set_mapped_fixity {
+  fixity    = Infix(NONASSOC, 450),
+  tok       = "-n->",
+  term_name = "step_native"
+}
+val (step_native_rules, step_native_cases, step_native_ind) = Hol_reln `
+(* 4.2.13.3 *)
+(!s f' f'' n. (s, f', is) -n-> (s', f'', is', r) ==> (s, f, [Frame n f' is]) -n-> (s', f, [Frame n f'' is'], r)) /\
+(* 4.4.3.1 *)
+(!s f x. (s, f, (vs, Get_local (n2w x) :: es)) -n-> (s, f, (EL x f.locals :: vs, es)) /\
+(* 4.4.3.2 *)
+(!s f x v. (s, f, (v :: vs, Set_local (n2w x) :: es)) -n-> (s, (f with locals := LUPDATE v x f.locals), (vs, es))) /\
+(* 4.4.3.4 *)
+(!s f x. (s, f, (vs, Get_global (n2w x) :: es)) -n-> (s, f, ((EL (EL x f.module.globaladdrs) s.globals).value :: vs, es))) /\
+(* 4.4.3.5 *)
+(!s f x a v. a = EL x f.module.globaladdrs ==>
+    (s, f, (v :: vs, Set_global (n2w x) :: es))
+  -n->
+    (s with globals := LUPDATE ((EL a s.globals) with value := v) a s.globals, f, (vs, es))
+) /\
+(* 4.4.4.1 *)
+(* First case, for Load without any further arguments. *)
+(!s f t i ma. (s, f, [Const (V_i32 i); Load t NONE ma]) -n-> (s, f, [wrap_option (bytes2val t) (mem_read (mem0 s f) i ma (bit_width t))])) /\ (* TODO: Trapping *)
+(* Second case, for Load with storage size and sign extension. *)
+(!s f. (s, f, (V_i32 i :: vs, Loadi t (SOME (sz, sx)) ma :: es)) -n-> (s, f, [wrap_option (bytes2val t) (mem_read (mem0 s f) i ma (bit_width_p sz))])) /\ (* TODO: Trapping *)
+(* 4.4.4.2 *)
+(* TODO *)
+(* (!s f t v a w ma bs. (c = (s, f, [Const (V_i32 i); Const v; Store t NONE ma]) /\ a = HD f.module.memaddrs /\ t = typeof v /\ w = mem_write (EL a s.mems) i ma (bit_width t) v) ==> *)
+(*     (w = NONE    ==> c -n-> (s, f, [Trap])) /\ *)
+(*     (w = SOME bs ==> c -n-> (s with mems := LUPDATE a (m with data := bs) s.mems), f, []) *)
+(* ) /\ *)
+(* 4.4.4.3 *)
+(!s f. (s, f, (vs, Current_memory :: es)) -n-> (s, f, (V_i32 (n2w (bytes_to_pages (LENGTH (EL (HD f.module.memaddrs) s.mems).data)))) :: vs, es)) /\
+(* 4.4.5.6 *)
+(* NON PLAIN *)
+(* (!vs es is l holed vs'. *)
+(*     (vs, Label (LENGTH vs) is (fill_b l holed (vs', [Plain (Br (n2w l))])), es) *)
+(*   -s-> *)
+(*     (fine (vs' :: vs) ((MAP Plain is) ++ es)) *)
+(* ) /\ *)
+(* 4.4.5.9 *)
+(!s f vs n k.
+    (s, f, (vs, Frame (LENGTH vs') f (fill_b b k (vs', [Plain Return])) :: es))
+  -n->
+    (s, f, (vs' ++ vs, es))
+) /\
+(* 4.4.6.2 *)
+(* NON PLAIN *)
+(* (!vs es n is vs'. (vs, Label n is (vs', []), es) -s-> (fine (vs' ++ vs) es)) *)
+(* 4.4.5.10 *)
+(!s f x. (s, f, (vs, Plain Call (n2w x) :: es)) -n-> (s, f, (vs, Invoke (EL x f.module.funcaddrs) :: es))) /\
+(* 4.4.5.11 *)
+(!s f x i a.
+    (s, f, (V_i32 (n2w i) :: vs, Call_indirect (n2w x) :: es))
+  -n->
+    (s, f, if has (EL (HD f.module.tableaddrs) s.tables).elem i (SOME a) /\ has f.module.types x (funcinst_type (EL a s.funcs)) then [Invoke a] else [Trap]) (* TODO: Trapping *)
+) /\
+(* 4.4.7.1 *)
+(!s f a t1s t2s m mod code. (has s.funcs a (Native (t1s _> t2s) mod code)) /\ ts = code.locals /\ Expr is = code.body /\ m = LENGTH t2s /\ n = LENGTH t1s ==>
+    (s, f, (vs, Invoke a))
+  -n->
+    (s, f, (DROP n vs, Frame m <| module := mod; locals := (TAKE n vs) ++ (MAP zero ts) |> [Block t2s is] :: es))
+) /\
+(* 4.4.7.2 *)
+(! s f n vs. ==> (s, f, (vs, Frame (LENGTH vs') f (vs', []) :: es)) -n-> (s, f, (vs' ++ vs, es)))
+`
+
 val _ = set_mapped_fixity {
   fixity    = Infix(NONASSOC, 450),
   tok       = "--->",
@@ -185,52 +205,10 @@ val _ = set_mapped_fixity {
 }
 val (step_rules, step_cases, step_ind) = Hol_reln `
 (* lift -s-> *)
-(!s f is is'. (is -s-> is') ==> (s, f, is) ---> (s, f, is')) /\
-(* 4.2.13.3 *)
-(!s f' f'' n. (s, f', is) ---> (s', f'', is') ==> (s, f, [Frame n f' is]) ---> (s', f, [Frame n f'' is'])) /\
-(* 4.4.3.1 *)
-(!s f x. (s, f, [Get_local (n2w x)]) ---> (s, f, [Const (EL x f.locals)])) /\
-(* 4.4.3.2 *)
-(!s f x v. (s, f, [Const v; Set_local (n2w x)]) ---> (s, (f with locals := LUPDATE v x f.locals), [])) /\
-(* 4.4.3.4 *)
-(!s f x. (s, f, [Get_global (n2w x)]) ---> (s, f, [Const (EL (EL x f.module.globaladdrs) s.globals).value])) /\
-(* 4.4.3.5 *)
-(!s f x a v. a = EL x f.module.globaladdrs ==>
-    (s, f, [Const v; Set_global (n2w x)])
-  --->
-    (s with globals := LUPDATE ((EL a s.globals) with value := v) a s.globals, f, [])
-) /\
-(* 4.4.4.1 *)
-(* First case, for Load without any further arguments. *)
-(!s f t i ma. (s, f, [Const (V_i32 i); Load t NONE ma]) ---> (s, f, [wrap_option (bytes2val t) (mem_read (mem0 s f) i ma (bit_width t))])) /\
-(* Second case, for Load with storage size and sign extension. *)
-(!s f. (s, f, [Const (V_i32 i); Load t (SOME (sz, sx)) ma]) ---> (s, f, [wrap_option (bytes2val t) (mem_read (mem0 s f) i ma (bit_width_p sz))])) /\
-(* 4.4.4.2 *)
-(* TODO *)
-(* (!s f t v a w ma bs. (c = (s, f, [Const (V_i32 i); Const v; Store t NONE ma]) /\ a = HD f.module.memaddrs /\ t = typeof v /\ w = mem_write (EL a s.mems) i ma (bit_width t) v) ==> *)
-(*     (w = NONE    ==> c ---> (s, f, [Trap])) /\ *)
-(*     (w = SOME bs ==> c ---> (s with mems := LUPDATE a (m with data := bs) s.mems), f, []) *)
-(* ) /\ *)
-(* 4.4.4.3 *)
-(!s f. (s, f, [Current_memory]) ---> (s, f, [Const (V_i32 (n2w (bytes_to_pages (LENGTH (EL (HD f.module.memaddrs) s.mems).data))))])) /\
-(* 4.4.5.9 *)
-(!s f vs n k. (n = LENGTH vs) ==> (s, f, [Frame n f (fill_b b k (vs ++ [Return]))]) ---> (s, f, vs)) /\
-(* 4.4.5.10 *)
-(!s f x. (s, f, [Call (n2w x)]) ---> (s, f, [Invoke (EL x f.module.funcaddrs)])) /\
-(* 4.4.5.11 *)
-(!s f x i a.
-    (s, f, [Const (V_i32 (n2w i)); Call_indirect (n2w x)])
-  --->
-    (s, f, if has (EL (HD f.module.tableaddrs) s.tables).elem i (SOME a) /\ has f.module.types x (funcinst_type (EL a s.funcs)) then [Invoke a] else [Trap])
-) /\
-(* 4.4.7.1 *)
-(!s f a t1s t2s m mod code. (has s.funcs a (Native (t1s _> t2s) mod code)) /\ ts = code.locals /\ Expr is = code.body /\ m = LENGTH t2s ==>
-    (s, f, (MAP Const vs) ++ [Invoke a])
-  --->
-    (s, f, [Frame m <| module := mod; locals := vs ++ (MAP zero t1s) |> [Block t2s is]])
-) /\
-(* 4.4.7.2 *)
-(! s f n vs. n = LENGTH vs ==> (s, f, [Frame n f vs]) ---> (s, f, vs))
+(!s f is is'. (s.result = NONE /\ (s.code -s-> (vs, es, r))) ==> s ---> (s with <| code := (vs, es); result := r |>)) /\
+(* lift -n-> *)
+(!s s' f' c'. (s.result = NONE /\ (s.store, s.frame, vs, es, r) -n-> (s', f', c', r)) ==> s ---> (s with <| store := s'; frame := f'; code := (vs, es); result := r |>)) /\
+(* 4.4.7.3 *)
 `
 
 val _ = set_mapped_fixity {
@@ -240,24 +218,19 @@ val _ = set_mapped_fixity {
 }
 val _ = Hol_reln `
 (!s f is s' f' is'. (s, f, is) ---> (s', f', is') ==>
-  (s, f, Expr is) -e-> (s', f', Expr is')
+    (s, f, Expr is) -e-> (s', f', Expr is')
 )`
 
 val _ = set_mapped_fixity {
   fixity    = Infix(NONASSOC, 450),
-  tok       = "-c->",
-  term_name = "step_complex"
+  tok       = "--->*",
+  term_name = "step_closure"
 }
-val (step_complex_rules, step_complex_cases, step_complex_ind) = Hol_reln `
-(* lift ---> *)
-(!hfs s s' f f' is is'. (s, f, is) ---> (s', f', is') ==> (hfs, (s, f, is)) -c-> (hfs, (s', f', is'))) /\
-(* 4.4.7.3 *)
-(* TODO: Ensure that s' extends s. *)
-(* (!hfs s s' f hf t a r. has s.funcs a (Host t hf) /\ (EL hf hfs) s vs = (s', r) /\ arguments_ok vs t ==> *)
-(*      (hfs, (s, f, (MAP Const vs) ++ [Invoke a])) *)
-(*    -c-> *)
-(*      (hfs, (s', f, [wrap_option (\x.x) r])) *)
-(* ) *)
-`
+val _ = set_mapped_fixity {
+  fixity    = Infix(NONASSOC, 450),
+  tok       = "↪*",
+  term_name = "step_closure"
+}
+val step_closure_def = Define `(!a. a --->* a) /\ (!a b c. (a ---> b /\ b ---> c) ==> (a --->* c))`
 
 val _ = export_theory ()
