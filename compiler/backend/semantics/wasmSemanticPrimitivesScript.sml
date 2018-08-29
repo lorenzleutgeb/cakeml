@@ -21,24 +21,14 @@
  * This theory contains definitions used by both the small-step as well
  * as the functional big-step semantics for wasm. *)
 
-open HolKernel boolLib Parse bossLib wordsTheory binary_ieeeTheory integer_wordLib arithmeticTheory wasmLangTheory patternMatchesLib
+open preamble wasmLangTheory
 
 val _ = patternMatchesLib.ENABLE_PMATCH_CASES()
-
 val _ = ParseExtras.tight_equality()
 
 val _ = new_theory "wasmSemanticPrimitives"
 
 (* 4.2  Runtime Structure *)
-
-(* 4.2.2  Results *)
-(* NOTE: The spec currently says that this list can have at most one
- *       element. However it notes that this restriction might be lifted
- *       in the future.
- *       The issue that tracks multi-value returns is at
- *        https://github.com/WebAssembly/design/issues/1146
- *)
-val _ = type_abbrev("result", ``:val list``)
 
 (* 4.2.4  Addresses *)
 (* https://www.w3.org/TR/2018/WD-wasm-core-1-20180215/#addresses%E2%91%A0 *)
@@ -134,11 +124,11 @@ val _ = Datatype `
     | Init_elem tableaddr u32 (funcidx list)
     | Init_data   memaddr u32 (   byte list)
 
-    | Label num (instr list) (result # (ainstr list))
-    | Frame num frame        (result # (ainstr list))
+    | Label num (instr list) ((val list) # (ainstr list))
+    | Frame num frame        ((val list) # (ainstr list))
 `
 
-val _ = type_abbrev("code", ``:(result # (ainstr list))``)
+val _ = type_abbrev("code", ``:((val list) # (ainstr list))``)
 
 val push_code_def = Define `push_code (vs1, es1) (vs2, es2) = ((vs2 ++ vs1), (es2 ++ es1))`
 
@@ -149,7 +139,7 @@ val _ = Datatype `
 (* B^0 ::= <val*> [_] <instr*> *)
     | B0 code
 (* B^(k+1) ::= <val*> label_<n> { <ainstr*> } B^k end <instr*> *)
-    | Bk result num (instr list) block (ainstr list)`
+    | Bk (val list) num (instr list) block (ainstr list)`
 
 val fill_b_def = Define `
 fill_b 0n (B0 c)              filler = push_code c filler /\
@@ -165,7 +155,7 @@ val _ = Datatype `
     (* [_] *)
     | E0
     (* <val*> <E> <instr*> *)
-    | Ex result           e (ainstr list)
+    | Ex (val list)       e (ainstr list)
     (* label_<n> { <instr*> } <E> end *)
     | Ey num (instr list) e`
 
@@ -173,29 +163,6 @@ val fill_e_def = Define `
 fill_e  E0            filler = filler /\
 fill_e (Ex   vs e es) filler = push_code (vs, es) (fill_e e filler) /\
 fill_e (Ey n es e   ) filler = ([], [Label n es (fill_e e filler)])`
-
-(* The above definitions of threads and configs from the spec is
- * a bit heavy. We introduce triples as a shorthand notation, as
- * used in the spec. *)
-val _ = type_abbrev("configuration", ``:(store # frame # (result # (ainstr list)))``)
-
-(* For integration with CakeML we define a state which subsumes a configuration,
- * since it contains a store and the the (intermediate) result and stack of the
- * only thread, i.e. its code.
- * Once threads become available in WebAssembly, see
- *  https://github.com/WebAssembly/threads
- * one may want to add this indirection here by moving frame and code
- * into a separate collection, and adding events. *)
-val _ = Datatype `
-  state =
-    <| ffi:   'ffi ffi_state
-     ; store: store
-     ; frame: frame
-     ; code:  code
-     ; clock: num
-     |>`
-
-val mk_config_def = Define `mk_config (s, f, vs, is) = Config s (Thread f (vs, is))`
 
 (* 4.3  Numerics *)
 (* 4.3.2  Integer Operations *)
@@ -350,5 +317,23 @@ val mem_range = Define `mem_range i ma n = ((w2n i) + (w2n ma.offset), n DIV 8)`
 
 val mem_load_def = Define `mem_load s f (V_i32 i) ma n = let (ptr, len) = mem_range i ma n in read_mem s f len ptr`
 val mem_store_def = Define `mem_store s f (V_i32 i) ma n bs = let (ptr, len) = mem_range i ma n in write_mem s f ptr bs`
+
+(* Results are the same for both semantics. *)
+val _ = Datatype `
+  result =
+    (* NOTE: The spec currently says that this list can have at most one
+     *       element. However it notes that this restriction might be lifted
+     *       in the future.
+     *       The issue that tracks multi-value returns is at
+     *        https://github.com/WebAssembly/design/issues/1146
+     *       See also 4.4.2
+     *)
+    | Result (val option)
+    (* If execution raises a trap, with some message describing the reason. *)
+    | Trap string
+    (* If a the instance is found to violate validity. *)
+    | TypeError string
+    | Timeout
+    | FinalFFI final_event`
 
 val _ = export_theory()

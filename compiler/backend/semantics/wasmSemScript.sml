@@ -17,21 +17,25 @@
 open preamble wasmSemanticPrimitivesTheory
 
 val _ = patternMatchesLib.ENABLE_PMATCH_CASES()
-
 val _ = ParseExtras.tight_equality()
 
 val _ = new_theory "wasmSem"
 
+(* For integration with CakeML we define a state which subsumes a configuration,
+ * since it contains a store and the the (intermediate) result and stack of the
+ * only thread, i.e. its code.
+ * Once threads become available in WebAssembly, see
+ *  https://github.com/WebAssembly/threads
+ * one may want to add this indirection here by moving frame and code
+ * into a separate collection, and adding events. *)
 val _ = Datatype `
-  result =
-    (* Might generalise to a list once spec defines it. *)
-    | Result (val option)
-    (* If execution raises a trap, with some message describing the reason. *)
-    | Trap string
-    (* If a the instance is found to violate validity. *)
-    | TypeError string
-    | Timeout
-    | FinalFFI final_event`
+  state =
+    <| ffi:   'ffi ffi_state
+     ; store: store
+     ; frame: frame
+     ; code:  code
+     ; clock: num
+     |>`
 
 (* Same as above, but decrements clock. *)
 val expand_def = Define `
@@ -53,6 +57,7 @@ val typ_assert = Define `
 
 val evaluate_nomatch = Define `evaluate_nomatch s = (SOME (TypeError "No reduction rule applicable. Stack does not match."), s)`
 
+(* NOTE: Traps are not bubbled up through reductions but returned directly! *)
 val evaluate_small_def = Define `
   evaluate_small s = let (vs, es) = s.code in (case (vs, (HD es)) of
     | vs, Plain pe => (case (vs, pe) of
@@ -268,11 +273,11 @@ val evaluate_small_def = Define `
 
     (* 4.4.5.6 *)
     | vs, Label (LENGTH vs') is (fill_b l holed (vs', [Plain (Br (n2w l))])) =>
-      expand s vs (MAP Plain is)
+      expand s vs ((MAP Plain is) ++ es)
 
     (* 4.4.5.9 *)
     | vs, Frame (LENGTH vs') s.frame (fill_b b k (vs', [Plain Return])) =>
-      resulting s vs
+      resulting s (vs' ++ vs)
 
     (* 4.4.6.2 *)
     | vs, Label n is (vs', []) =>
@@ -323,7 +328,7 @@ val evaluate_small_def = Define `
 val wrap_result = Define `
 wrap_result [    ]    = Result NONE /\
 wrap_result [x   ]    = Result (SOME x) /\
-wrap_result [x; y]::t = TypeError "Expected result of exactly one value!"`
+wrap_result [x; y]::t = TypeError "Expected result of at most one value"`
 
 val evaluate_def = tDefine "evaluate" `
   evaluate s = let (vs, es) = s.code in case (vs, es) of
@@ -332,5 +337,8 @@ val evaluate_def = tDefine "evaluate" `
       | SOME r', s' => (r', s')
       | NONE   , s' => evaluate s'
 `
+
+(* TODO: Do we need something like evaluate_expression? *)
+
 
 val _ = export_theory()
