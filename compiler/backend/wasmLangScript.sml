@@ -32,6 +32,10 @@ val to_list_def = Define `
   (to_list (NBASE a)   = CONS a NIL) /\
   (to_list (NCONS a y) = CONS a (to_list y))`
 
+val to_nlist_def = Define `
+  (to_nlist (CONS a NIL)) = NBASE a /\
+  (to_nlist (CONS a y))   = NCONS a (to_nlist y)`
+
 val nlist_last_length = store_thm(
   "nlist_last_length",
   ``!isne. (to_list isne) <> []``,
@@ -85,13 +89,41 @@ val _ = Define `T_f32 = Tv Kf W32`
 val _ = Define `T_f64 = Tv Kf W64`
 
 val _ = Define `flip_width W32 = W64 /\ flip_width W64 = W32`
-val _ = Define `flip_kind Ki = Kf /\ flip_kind Kf = Ki`
+val _ = Define `flip_kind  Ki  = Kf  /\ flip_kind  Kf  = Ki`
 
-val _ = Define `other_kind (Tv k w) = (Tv (flip_kind k) w)`
-val _ = Define `other_width (Tv k w) = (Tv k (flip_width w))`
+val _ = Define `other_kind  (Tv k w) = Tv (flip_kind k)            w `
+val _ = Define `other_width (Tv k w) = Tv            k (flip_width w)`
 
-val _ = Define `kindof (Tv k w) = k`
+val _ = Define `kindof  (Tv k w) = k`
 val _ = Define `widthof (Tv k w) = w`
+
+(* 4.2.1  Values *)
+(* Along with their types, we also define values. This enables direct definition
+ * of the constant instruction. *)
+val _ = Datatype `val = V_i32 word32 | V_i64 word64 | V_f32 single | V_f64 double`
+
+val typeof_def = Define `
+typeof v = case v of
+             | V_i32 _ => T_i32
+             | V_i64 _ => T_i64
+             | V_f32 _ => T_f32
+             | V_f64 _ => T_f64`
+
+val val2w_def = Define `
+  val2w v = case v of
+    | V_i32 w => w2w w
+    | V_i64 w => w2w w
+    | V_f32 f => w2w (float_to_fp32 f)
+    | V_f64 f => w2w (float_to_fp64 f)`
+
+val w2val_def = Define `
+  w2val t = case t of
+    | Tv Ki W32 => V_i32                 o w2w
+    | Tv Ki W64 => V_i64                 o w2w
+    | Tv Kf W32 => V_f32 o fp32_to_float o w2w
+    | Tv Kf W64 => V_f64 o fp64_to_float o w2w`
+
+val wasm_width_def = Define `wasm_width a = if dimword(a) <= dimword(:32) then W32 else W64`
 
 (* 2.3.1.1  Conventions *)
 val bit_width_def = Define `bit_width (Tv k W32) = 32n /\ bit_width (Tv k W64) = 64n`
@@ -140,9 +172,9 @@ val _ = Datatype `
     | Te_global globaltype`
 
 (* 2.3.8.1  Conventions *)
-val _ = Define `ext_funcs = FOLDR (\x l. case x of Te_func y => y::l | _ => l) []`
-val _ = Define `ext_tables = FOLDR (\x l. case x of Te_table y => y::l | _ => l) []`
-val _ = Define `ext_mems = FOLDR (\x l. case x of Te_mem y => y::l | _ => l) []`
+val _ = Define `ext_funcs   = FOLDR (\x l. case x of Te_func   y => y::l | _ => l) []`
+val _ = Define `ext_tables  = FOLDR (\x l. case x of Te_table  y => y::l | _ => l) []`
+val _ = Define `ext_mems    = FOLDR (\x l. case x of Te_mem    y => y::l | _ => l) []`
 val _ = Define `ext_globals = FOLDR (\x l. case x of Te_global y => y::l | _ => l) []`
 
 (* 2.4  Instructions *)
@@ -152,19 +184,12 @@ val _ = Datatype `iunop = Clz | Ctz | Popcnt`
 
 val _ = Datatype `
   ibinop =
-    | Add
-    | Sub
-    | Mul
-    | Div sx
+    | Add    | And  | Shl
+    | Sub    | Or   | Shr sx
+    | Mul    | Xor  | Rotl
+    | Div sx        | Rotr
     | Rem sx
-    | And
-    | Or
-    | Xor
-    | Not
-    | Shl
-    | Shr sx
-    | Rotl
-    | Rotr`
+`
 
 val _ = Datatype `funop = Negf | Absf | Ceilf | Floorf | Truncf | Nearestf | Sqrtf`
 
@@ -195,16 +220,6 @@ val _ = type_abbrev(   "memidx", ``:word32``)
 val _ = type_abbrev("globalidx", ``:word32``)
 val _ = type_abbrev( "localidx", ``:word32``)
 val _ = type_abbrev( "labelidx", ``:word32``)
-
-(* 4.2.1  Values *)
-(* Moved up since instr depends on val. *)
-val _ = Datatype `val = V_i32 word32 | V_i64 word64 | V_f32 ((8, 23) float) | V_f64 ((11, 52) float)`
-
-val typeof_def = Define `
-(!x. typeof (V_i32 x) = T_i32) /\
-(!x. typeof (V_i64 x) = T_i64) /\
-(!x. typeof (V_f32 x) = T_f32) /\
-(!x. typeof (V_f64 x) = T_f64)`
 
 val _ = Datatype `
   instr =
