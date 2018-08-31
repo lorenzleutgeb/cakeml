@@ -29,7 +29,6 @@ val _ = ParseExtras.tight_equality()
 val _ = new_theory "wasmSemanticPrimitives"
 
 (* 4.2  Runtime Structure *)
-
 (* 4.2.4  Addresses *)
 (* https://www.w3.org/TR/2018/WD-wasm-core-1-20180215/#addresses%E2%91%A0 *)
 (* Moved up since externval needs addrs. *)
@@ -169,25 +168,26 @@ fill_e (Ey n es e   ) filler = ([], [Label n es (fill_e e filler)])`
 (* NOTE: ctz = count trailing zeros, clz = count leading zeros, popcnt = count 1s *)
 val _ = Define `app_unop_i Ctz c = 0w /\ app_unop_i Clz c = 0w /\ app_unop_i Popcnt c = 0w`
 
-val _ = Define
-  `app_binop_i iop c1 c2 = SOME (case iop of
-                              Add => word_add c1 c2
-                            | Sub => word_sub c1 c2
-                            | Mul => word_mul c1 c2
-                            | Div U => word_div c1 c2
-                            | Div S => word_sdiv c1 c2
-                            | Rem U => word_mod c1 c2
-                            | Rem S => word_smod c1 c2
-                            | And => word_and c1 c2
-                            | Or => word_or c1 c2
-                            | Xor => word_xor c1 c2
-                            | Shl => word_lsl c1 (w2n c2)
-                            | Shr U => word_lsr c1 (w2n c2)
-                            | Shr S => word_asr c1 (w2n c2)
-                            | Rotl => word_rol c1 (w2n c2)
-                            | Rotr => word_ror c1 (w2n c2))`
+val _ = Define `
+  app_binop_i iop c1 c2 = SOME (case iop of
+    | Add => word_add c1 c2
+    | Sub => word_sub c1 c2
+    | Mul => word_mul c1 c2
+    | Div U => word_div c1 c2
+    | Div S => word_sdiv c1 c2
+    | Rem U => word_mod c1 c2
+    | Rem S => word_smod c1 c2
+    | And => word_and c1 c2
+    | Or  => word_or c1 c2
+    | Xor => word_xor c1 c2
+    | Shl   => word_lsl c1 (w2n c2)
+    | Shr U => word_lsr c1 (w2n c2)
+    | Shr S => word_asr c1 (w2n c2)
+    | Rotl => word_rol c1 (w2n c2)
+    | Rotr => word_ror c1 (w2n c2)
+  )`
 
-val _ = Define `app_testop_i Eqz c = (w2n c = 0)`
+val _ = Define `app_testop_i Eqz c = (c = 0w)`
 
 val _ = Define `
 app_relop_i  Eq    a b = (a = b)          /\
@@ -214,41 +214,41 @@ app_unop_f Truncf = round roundTowardZero o float_to_real /\
 app_unop_f Nearestf = round roundTiesToEven o float_to_real /\
 app_unop_f Sqrtf c = SND (float_sqrt roundTiesToEven c)`
 
-val _ = Define
-  `app_binop_f fop c1 c2 = (case fop of
-                              Addf => SOME (SND (float_add roundTiesToEven c1 c2))
-                            | Subf => SOME (SND (float_sub roundTiesToEven c1 c2))
-                            | Mulf => SOME (SND (float_mul roundTiesToEven c1 c2))
-                            | Divf => SOME (SND (float_div roundTiesToEven c1 c2))
-                            | Min => SOME (if float_greater_equal c1 c2 then c2 else c1)
-                            | Max => SOME (if float_greater_equal c1 c2 then c1 else c2)
-                            | Copysign => SOME (if c1.Sign = c2.Sign then c1 else (float_negate c1)))`
+val float_min_def = Define `float_min x y = if float_greater_equal x y then y else x`
+val float_max_def = Define `float_max x y = if float_greater_equal x y then x else y`
+val float_copysign = Define `float_copysign x y =(if x.Sign = y.Sign then x else (float_negate x))`
 
-val _ = Define
-  `app_relop_f rop c1 c2 = (case rop of
-                              Eqf => float_equal c1 c2
-                            | Nef => ~float_equal c1 c2
-                            | Ltf => float_less_than c1 c2
-                            | Gtf => float_greater_than c1 c2
-                            | Lef => float_less_equal c1 c2
-                            | Gef => float_greater_equal c1 c2)`
+val _ = Define `
+  app_binop_f fop x y = SOME (case fop of
+    | Addf => SND (float_add roundTiesToEven x y)
+    | Subf => SND (float_sub roundTiesToEven x y)
+    | Mulf => SND (float_mul roundTiesToEven x y)
+    | Divf => SND (float_div roundTiesToEven x y)
+    | Min => float_min x y
+    | Max => float_max x y
+    | Copysign => float_copysign x y
+  )`
+
+val float_unequal_def = Define `float_unequal x y = ~float_equal x y`
+
+val _ = Define `
+  app_relop_f rop = (case rop of
+    | Eqf => float_equal
+    | Nef => float_unequal
+    | Ltf => float_less_than
+    | Gtf => float_greater_than
+    | Lef => float_less_equal
+    | Gef => float_greater_equal
+  )`
 
 (* 4.3.4  Conversions *)
 
-val bytes2word_def = Define `bytes2word (bs:byte list) = l2w 8n (MAP w2n bs)`
-val word2bytes_def = Define `word2bytes w = (MAP n2w (w2l 8n w)):(byte list)`
+val bytes2word_def = Define `bs2w bs = l2w 8n (MAP w2n bs)`
+val word2bytes_def = Define `w2bs w = (MAP n2w (word_to_oct_list w)):(byte list)`
 
-val bytes2val_def = Define `
-(bytes2val T_i32 = V_i32 o bytes2word) /\
-(bytes2val T_i64 = V_i64 o bytes2word) /\
-(bytes2val T_f32 = V_f32 o (\ (w:word32). <| Sign := (0 >< 0) w; Exponent := ( 8 >< 1) w; Significand := (31 ><  9) w |>) o bytes2word) /\
-(bytes2val T_f64 = V_f64 o (\ (w:word64). <| Sign := (0 >< 0) w; Exponent := (11 >< 1) w; Significand := (63 >< 12) w |>) o bytes2word)`
-
-val val2bytes_def = Define `
-(val2bytes (V_i32 v) = word2bytes v) /\
-(val2bytes (V_i64 v) = word2bytes v) /\
-(val2bytes (V_f32 v) = word2bytes (word_join v.Significand (word_join v.Exponent v.Significand))) /\
-(val2bytes (V_f64 v) = word2bytes (word_join v.Significand (word_join v.Exponent v.Significand)))`
+(* These two variants will guess the width. *)
+val w2ival_def = Define `w2ival w = w2valal (Tv Ki (wasm_width w)) w`
+val w2fval_def = Define `w2fval w = w2valal (Tv Kf (wasm_width w)) w`
 
 val int_bounds_def = Define `int_bounds t U = (0i, &(2 EXP (bit_width t)):int) /\ int_bounds t S = (~&(2 EXP ((bit_width t) - 1)), &(bit_width t) - 1)`
 val between_def = Define `between (lower:int) (upper:int) (x:int) = (lower <= x /\ x < upper)`
@@ -271,9 +271,9 @@ cvt (Convert W32 U W64) (V_i64 v) = SOME ((V_f32 o real_to_float roundTiesToEven
 cvt (Convert W64 U W64) (V_i64 v) = SOME ((V_f64 o real_to_float roundTiesToEven o real_of_num o w2n) v) /\
 cvt (Convert W32 S W64) (V_i64 v) = SOME ((V_f32 o real_to_float roundTiesToEven o real_of_int o w2i) v) /\
 cvt (Convert W64 S W64) (V_i64 v) = SOME ((V_f64 o real_to_float roundTiesToEven o real_of_int o w2i) v) /\
-cvt Demote (V_f64 v) = SOME ((V_f32 o real_to_float roundTiesToEven o float_to_real) v) /\
-cvt Promote (V_f32 v) = SOME ((V_f64 o real_to_float  roundTiesToEven o float_to_real) v) /\
-cvt (Reinterpret t) v = SOME ((bytes2val (other_kind (typeof v)) o val2bytes) v)
+cvt Demote v = SOME ((w2val T_f32 o val2w) v) /\
+cvt Promote v = SOME ((w2val T_f64 o val2w) v) /\
+cvt (Reinterpret t) v = SOME ((w2val (other_kind t) o val2w) v)
 `
 
 (* Some functions that define the semantics of instructions return booleans.
@@ -290,8 +290,8 @@ val arguments_ok = Define `arguments_ok vs (Tf ts rt) = LIST_REL (\v t. t = type
 val zero_def = Define `
 zero T_i32 = V_i32 0w /\
 zero T_i64 = V_i64 0w /\
-zero T_f32 = V_f32 <| Sign := 0w; Exponent := 0w; Significand := 0w |> /\
-zero T_f64 = V_f64 <| Sign := 0w; Exponent := 0w; Significand := 0w |>`
+zero T_f32 = V_f32 (fp32_to_float 0w) /\
+zero T_f64 = V_f64 (fp64_to_float 0w)`
 
 val has_def = Define `has xs i x = (i < (LENGTH xs) /\ EL i xs = x)`
 
