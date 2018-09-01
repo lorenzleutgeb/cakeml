@@ -269,10 +269,10 @@ local val compile_quotation = `
             (l2, nr2, m) = compile p2 n m in
             (l1 ++ l2, nr1 \/ nr2, m)
 
-    | stackLang$If c r ri Skip Skip => ([], F, m)
-    | stackLang$If c r ri Skip p2   => let (l2, nr2, m) = compile p2 n m in simple_if n m       c  r ri l2 [] F
-    | stackLang$If c r ri p1   Skip => let (l1, nr1, m) = compile p1 n m in simple_if n m (flip c) r ri l1 [] F
     | stackLang$If c r ri p1   p2   =>
+          if p1 = Skip /\ p2 = Skip then ([], F, m) else
+          if p1 = Skip then let (l2, nr2, m) = compile p2 n m in simple_if n m       c  r ri l2 [] F else
+          if p2 = Skip then let (l1, nr1, m) = compile p1 n m in simple_if n m (flip c) r ri l1 [] F else
           let (l1, nr1, m) = compile p1 n m ;
               (l2, nr2, m) = compile p2 n m in
                    if nr1 then simple_if n m (flip c) r ri l1 l2 nr2
@@ -317,7 +317,6 @@ local val compile_quotation = `
 `
 in
 val compile_def = Define compile_quotation
-
 
 (* val compile_pmatch = Q.store_thm("compile_pmatch",`∀p n m.` @ *)
 (*   (compile_quotation |> *)
