@@ -77,21 +77,57 @@ val _ = set_mapped_fixity {
   term_name = "step_simple"
 }
 val (step_simple_rules, step_simple_cases, step_simple_ind) = Hol_reln `
+(* 4.4.1.1 *)
+(!vs es v. (vs, Const v, es) -s-> (fine (v :: vs) es)) /\
 (* 4.4.1.2 *)
 (!vs es c op. (V_i32 c :: vs, Unop_i W32 op, es) -s-> (fine ((V_i32 (app_unop_i op c)) :: vs) es)) /\
+(!vs es c op. (V_i64 c :: vs, Unop_i W64 op, es) -s-> (fine ((V_i64 (app_unop_i op c)) :: vs) es)) /\
+(!vs es c op. (V_f32 c :: vs, Unop_f W32 op, es) -s-> (fine ((V_f32 (app_unop_f op c)) :: vs) es)) /\
+(!vs es c op. (V_f64 c :: vs, Unop_f W64 op, es) -s-> (fine ((V_f64 (app_unop_f op c)) :: vs) es)) /\
 (* 4.4.1.3 *)
 (!vs es c1 c2 op.
     (V_i32 c1 :: V_i32 c2 :: vs, Binop_i W32 op, es)
   -s->
     (wrap_option (OPTION_MAP V_i32 (app_binop_i op c1 c2)) "Binary operation without result" vs es)
 ) /\
+(!vs es c1 c2 op.
+    (V_i64 c1 :: V_i32 c2 :: vs, Binop_i W32 op, es)
+  -s->
+    (wrap_option (OPTION_MAP V_i64 (app_binop_i op c1 c2)) "Binary operation without result" vs es)
+) /\
+(!vs es c1 c2 op.
+    (V_f32 c1 :: V_f32 c2 :: vs, Binop_f W32 op, es)
+  -s->
+    (wrap_option (OPTION_MAP V_f32 (app_binop_f op c1 c2)) "Binary operation without result" vs es)
+) /\
+(!vs es c1 c2 op.
+    (V_f64 c1 :: V_f32 c2 :: vs, Binop_f W32 op, es)
+  -s->
+    (wrap_option (OPTION_MAP V_f64 (app_binop_f op c1 c2)) "Binary operation without result" vs es)
+) /\
 (* 4.4.1.4 *)
 (!vs es c op. (V_i32 c :: vs, Testop_i W32 op, es) -s-> (fine (wrap_bool (app_testop_i op c) :: vs) es)) /\
+(!vs es c op. (V_i64 c :: vs, Testop_i W64 op, es) -s-> (fine (wrap_bool (app_testop_i op c) :: vs) es)) /\
 (* 4.4.1.5 *)
 (!vs es c1 c2 op.
     (V_i32 c1 :: V_i32 c2 :: vs, Relop_i W32 op, es)
   -s->
     (fine (wrap_bool (app_relop_i op c1 c2) :: vs) es)
+) /\
+(!vs es c1 c2 op.
+    (V_i64 c1 :: V_i64 c2 :: vs, Relop_i W64 op, es)
+  -s->
+    (fine (wrap_bool (app_relop_i op c1 c2) :: vs) es)
+) /\
+(!vs es c1 c2 op.
+    (V_f32 c1 :: V_f32 c2 :: vs, Relop_f W32 op, es)
+  -s->
+    (fine (wrap_bool (app_relop_f op c1 c2) :: vs) es)
+) /\
+(!vs es c1 c2 op.
+    (V_f64 c1 :: V_f64 c2 :: vs, Relop_f W64 op, es)
+  -s->
+    (fine (wrap_bool (app_relop_f op c1 c2) :: vs) es)
 ) /\
 (* 4.4.1.6 *)
 (!vs es v c. (v :: vs, Conversion c, es) -s-> (wrap_option (cvt c v) "Conversion error" vs es)) /\
