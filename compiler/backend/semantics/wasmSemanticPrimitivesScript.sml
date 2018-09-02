@@ -247,8 +247,8 @@ val bytes2word_def = Define `bs2w bs = l2w 8n (MAP w2n bs)`
 val word2bytes_def = Define `w2bs w = (MAP n2w (word_to_oct_list w)):(byte list)`
 
 (* These two variants will guess the width. *)
-val w2ival_def = Define `w2ival w = w2val (Tv Ki (wasm_width w)) w`
-val w2fval_def = Define `w2fval w = w2val (Tv Kf (wasm_width w)) w`
+val w2ival_def = Define `w2ival (w:'a word) = w2val (Tv Ki (wasm_width (:'a))) w`
+val w2fval_def = Define `w2fval (w:'a word) = w2val (Tv Kf (wasm_width (:'a))) w`
 
 val int_bounds_def = Define `int_bounds t U = (0i, &(2 EXP (bit_width t)):int) /\ int_bounds t S = (~&(2 EXP ((bit_width t) - 1)), &(bit_width t) - 1)`
 val between_def = Define `between (lower:int) (upper:int) (x:int) = (lower <= x /\ x < upper)`
