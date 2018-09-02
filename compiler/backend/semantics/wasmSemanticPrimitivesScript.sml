@@ -271,9 +271,12 @@ cvt (Convert W32 U W64) (V_i64 v) = SOME ((V_f32 o real_to_float roundTiesToEven
 cvt (Convert W64 U W64) (V_i64 v) = SOME ((V_f64 o real_to_float roundTiesToEven o real_of_num o w2n) v) /\
 cvt (Convert W32 S W64) (V_i64 v) = SOME ((V_f32 o real_to_float roundTiesToEven o real_of_int o w2i) v) /\
 cvt (Convert W64 S W64) (V_i64 v) = SOME ((V_f64 o real_to_float roundTiesToEven o real_of_int o w2i) v) /\
-cvt Demote v = SOME ((w2val T_f32 o val2w) v) /\
-cvt Promote v = SOME ((w2val T_f64 o val2w) v) /\
-cvt (Reinterpret t) v = SOME ((w2val (other_kind t) o val2w) v)
+cvt Demote (V_f64 v) = SOME (w2val T_f32 (fp64_to_fp32 roundTiesToEven (float_to_fp64 v))) /\
+cvt Promote (V_f32 v) = SOME ((w2val T_f64 (fp32_to_fp64 (float_to_fp32 v)))) /\
+cvt (Reinterpret t) (V_f32 v) = SOME (w2val T_i32 (float_to_fp32 v)) /\
+cvt (Reinterpret t) (V_f64 v) = SOME (w2val T_i64 (float_to_fp64 v)) /\
+cvt (Reinterpret t) (V_i32 v) = SOME (V_f32 (fp32_to_float v)) /\
+cvt (Reinterpret t) (V_i64 v) = SOME (V_f64 (fp64_to_float v))
 `
 
 (* Some functions that define the semantics of instructions return booleans.
