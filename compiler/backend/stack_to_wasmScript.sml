@@ -72,7 +72,9 @@ val reg_to_global_def = Define `reg_to_global n = n2w n`
 val fp_reg_to_global_def = Define `fp_reg_to_global n = n2w n`
 
 val set_lab_def = Define `set_lab = [Set_global (n2w 42n)]`
+val get_lab_def = Define `get_lab = [Get_global (n2w 42n)]`
 val set_seg_def = Define `set_seg = [Set_global (n2w 43n)]`
+val get_seg_def = Define `get_seg = [Get_global (n2w 43n)]`
 
 val get_reg_def = Define `get_reg r = [Get_global (reg_to_global r)]`
 val set_reg_def = Define `set_reg r = [Set_global (reg_to_global r)]`
@@ -241,9 +243,9 @@ val compile_jump_def = Define `
 (compile_jump n' m' (INR r) w = jmp_indirect n' m' r w)`;
 
 val switch_def = Define `
-  switch r bs = FOLDR
+  switch v bs = FOLDR
     (\x acc. Block [] acc::x)
-    [Block [] ((get_reg r) ++ [Br_table (to_nlist (GENLIST (\i. n2w (i + 1)) (LENGTH bs))) 0w])]
+    [Block [] (v ++ [Br_table (to_nlist (GENLIST (\i. n2w (i + 1)) (LENGTH bs))) 0w])]
     bs
 `
 
@@ -257,24 +259,24 @@ val lab2reg_def = Define `lab2reg i l1 l2 = [(wasmLang$Const (V_i64 (word_or (wo
 
 (* Go from top to bottom, and when a new lab is requested: Generate a new Block, put the *)
 (* own code afterwards and recurse into the block. *)
-local val compile_quotation = `
-  compile (p:'a stackLang$prog) n m =
+local val compile_section_quotation = `
+  compile_section (p:'a stackLang$prog) n m =
     let width = wasm_width (:'a) in dtcase p of
     | Tick => ([Nop], F, m)
     | Inst a => (compile_inst a, F, m)
     | Halt _ => ([], T, m) (* TODO: Set some flag that will stop execution. *)
 
     | Seq p1 p2 =>
-        let (l1, nr1, m) = compile p1 n m ;
-            (l2, nr2, m) = compile p2 n m in
+        let (l1, nr1, m) = compile_section p1 n m ;
+            (l2, nr2, m) = compile_section p2 n m in
             (l1 ++ l2, nr1 \/ nr2, m)
 
     | stackLang$If c r ri p1   p2   =>
           if p1 = Skip /\ p2 = Skip then ([], F, m) else
-          if p1 = Skip then let (l2, nr2, m) = compile p2 n m in simple_if n m       c  r ri l2 [] F else
-          if p2 = Skip then let (l1, nr1, m) = compile p1 n m in simple_if n m (flip c) r ri l1 [] F else
-          let (l1, nr1, m) = compile p1 n m ;
-              (l2, nr2, m) = compile p2 n m in
+          if p1 = Skip then let (l2, nr2, m) = compile_section p2 n m in simple_if n m       c  r ri l2 [] F else
+          if p2 = Skip then let (l1, nr1, m) = compile_section p1 n m in simple_if n m (flip c) r ri l1 [] F else
+          let (l1, nr1, m) = compile_section p1 n m ;
+              (l2, nr2, m) = compile_section p2 n m in
                    if nr1 then simple_if n m (flip c) r ri l1 l2 nr2
               else if nr2 then simple_if n m       c  r ri l2 l1 nr1
               else
@@ -282,7 +284,7 @@ local val compile_quotation = `
                    (jmp    n m        n (m + 1)) ++ lab ++ l1 ++ lab, F, m + 2)
 
     | While c r ri p =>
-        let (l, _, m) = compile p n m in
+        let (l, _, m) = compile_section p n m in
             (lab ++ (jmp_if n m (flip c) r ri n (m + 1)) ++ l
                  ++ (jmp    n m               n  m     ) ++ lab, F, m + 2)
 
@@ -292,12 +294,12 @@ local val compile_quotation = `
 
     | stackLang$Call  NONE                          dest _  => (compile_jump n m dest width, T, m)
     | stackLang$Call (SOME (rhp, rhlr, rhl1, rhl2)) dest eh =>
-        let (rhi, nr1, m) = compile rhp n m ;
+        let (rhi, nr1, m) = compile_section rhp n m ;
             prefix = (lab2reg rhlr rhl1 rhl2) ++ (compile_jump n m dest width) ++ lab ++ rhi in
         (dtcase eh of
         | NONE => (prefix, nr1, m)
         | SOME (ehp, ehl1, ehl2) =>
-          let (ehi, nr2, m) = compile ehp n m in
+          let (ehi, nr2, m) = compile_section ehp n m in
               (prefix ++ (jmp n m n m) ++ lab ++ ehi ++ lab, nr1 /\ nr2, m + 1))
 
     | FFI ffi_index ptr1 len1 ptr2 len2 _ =>
@@ -309,14 +311,16 @@ local val compile_quotation = `
             (Call (0w:funcidx) (* TODO: Find out how to get the correct funcidx! *))
           ], F, n)
         (* Since we must use wasm's Call instruction here, we do not emit a new lab, *)
-    (*      * do not deal with the link register, etc. *)
-    (*      * NOTE: We actually do not use the link register even though it was allocated... *)
+        (*      * do not deal with the link register, etc. *)
+        (*      * NOTE: We actually do not use the link register even though it was allocated... *)
 
     | LocValue i l1 l2 => ((lab2reg i l1 l2), F, m)
-    | _  => ([], F, m) (* NOTE: Install and CodeBufferWrite are left out in the initial implementation. *)
+
+    (* NOTE: Install and CodeBufferWrite are left out in the initial implementation. *)
+    | _  => ([], F, m)
 `
 in
-val compile_def = Define compile_quotation
+val compile_section_def = Define compile_section_quotation
 
 (* val compile_pmatch = Q.store_thm("compile_pmatch",`∀p n m.` @ *)
 (*   (compile_quotation |> *)
@@ -329,15 +333,16 @@ val compile_def = Define compile_quotation
 end
 
 val prog_to_block_def = Define `
-  prog_to_block (n,p) =
-    let (lines,_,m) = (compile p n (next_lab p 1)) in
-      Block NONE (append (Append lines (List [Lab n m 0])))`
-      (* Section n (append (Append lines (List [Lab n m 0])))` *)
+  prog_to_block (n, p) =
+    let (lines, _, m) = (compile_section p n (next_lab p 1)) in
+      switch (get_lab) (splitall (\x. x = (Block [] [])) (lab ++ lines))
+`
 
-val _ = Datatype`config =
-  <| reg_names : num num_map
-   ; jump : bool (* whether to compile to JumpLower or If Lower ... in stack_remove*)
-   |>`;
+val _ = Datatype `
+  config =
+   <| reg_names : num num_map
+    ; jump : bool (* whether to compile to JumpLower or If Lower ... in stack_remove*)
+    |>`
 
 val compile_def = Define `
  compile stack_conf data_conf max_heap sp offset prog =
@@ -347,4 +352,4 @@ val compile_def = Define `
    let prog = stack_names$compile stack_conf.reg_names prog in
      MAP prog_to_block prog`;
 
-val _ = export_theory();
+val _ = export_theory()
