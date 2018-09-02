@@ -139,11 +139,11 @@ val (typ_rules, typ_cases, typ_ind) = Hol_reln `
 (! c t x m . (has c.globals x (T_global m t)) ==> c |- [Get_global (n2w x)] ::- produces [t]) /\
 (! c t x . (has c.globals x (T_global T_var t)) ==> c |- [Set_global (n2w x)] ::- consumes [t]) /\
 (* 3.3.4.1 - 3.3.4.2 *)
-(! c t . (hasmem c /\ (align_ok ma (bit_width t))) ==> c |- [Load t NONE ma] ::- [T_i32] _> [t]) /\
-(! c t tp . (hasmem c /\ (align_ok ma (bit_width_p tp)) /\ (FST arg) = tp) ==> c |- [Load t (SOME arg) ma] ::- [T_i32] _> [t]) /\
+(! c t . (hasmem c /\ (align_ok ma (bit_width t))) ==> c |- [Load t ma] ::- [T_i32] _> [t]) /\
+(! c w tp sx ma. (hasmem c /\ (align_ok ma (bit_width_p tp))) ==> c |- [Loadi w tp sx ma] ::- [T_i32] _> [Tv Ki w]) /\
 (* 3.3.4.3 - 3.3.4.4 *)
-(! c t . (hasmem c /\ (align_ok ma (bit_width t))) ==> c |- [Store t NONE ma] ::- consumes [T_i32; t]) /\
-(! c t tp . (hasmem c /\ (align_ok ma (bit_width_p tp))) ==> c |- [Store t (SOME tp) ma] ::- consumes [T_i32; t]) /\
+(! c t . (hasmem c /\ (align_ok ma (bit_width t))) ==> c |- [Store t ma] ::- consumes [T_i32; t]) /\
+(! c w tp ma. (hasmem c /\ (align_ok ma (bit_width_p tp))) ==> c |- [Storei w tp ma] ::- consumes [T_i32; Ti Ki w]) /\
 (* 3.3.4.5 - 3.3.4.6 *)
 (! c . hasmem c ==> c |- [Current_memory] ::- produces [T_i32]) /\
 (! c . hasmem c ==> c |- [Grow_memory] ::- endofunc [T_i32]) /\
@@ -159,7 +159,7 @@ val (typ_rules, typ_cases, typ_ind) = Hol_reln `
 (* 3.3.5.7 *)
 (! c ts l . (has c.labels l ts) ==> c |- [Br_if (n2w l)] ::- (ts ++ [T_i32]) _> ts) /\
 (* 3.3.5.8 *)
-(! c ts ln ls . (has c.labels ln ts /\ EVERY (\x . has c.labels x ts) ls) ==> c |- [Br_table (MAP n2w ls) (n2w ln)] ::- (ts ++ [T_i32]) _> ts) /\
+(! c ts ln ls . (has c.labels ln ts /\ EVERY (\x . has c.labels x ts) ls) ==> c |- [Br_table (to_nlist (MAP n2w ls)) (n2w ln)] ::- (ts ++ [T_i32]) _> ts) /\
 (* 3.3.5.9 *)
 (! c t t1s t2s . (c.return = (SOME t)) ==> c |- [Return] ::- (t1s ++ t) _> t2s) /\
 (* 3.3.5.10 *)
