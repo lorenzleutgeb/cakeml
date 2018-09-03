@@ -91,7 +91,7 @@ val (step_simple_rules, step_simple_cases, step_simple_ind) = Hol_reln `
     (wrap_option (OPTION_MAP V_i32 (app_binop_i op c1 c2)) "Binary operation without result" vs es)
 ) /\
 (!vs es c1 c2 op.
-    (V_i64 c1 :: V_i32 c2 :: vs, Binop_i W32 op, es)
+    (V_i64 c1 :: V_i64 c2 :: vs, Binop_i W64 op, es)
   -s->
     (wrap_option (OPTION_MAP V_i64 (app_binop_i op c1 c2)) "Binary operation without result" vs es)
 ) /\
@@ -101,7 +101,7 @@ val (step_simple_rules, step_simple_cases, step_simple_ind) = Hol_reln `
     (wrap_option (OPTION_MAP V_f32 (app_binop_f op c1 c2)) "Binary operation without result" vs es)
 ) /\
 (!vs es c1 c2 op.
-    (V_f64 c1 :: V_f32 c2 :: vs, Binop_f W32 op, es)
+    (V_f64 c1 :: V_f64 c2 :: vs, Binop_f W64 op, es)
   -s->
     (wrap_option (OPTION_MAP V_f64 (app_binop_f op c1 c2)) "Binary operation without result" vs es)
 ) /\
@@ -169,24 +169,36 @@ val _ = set_mapped_fixity {
 }
 val (step_native_rules, step_native_cases, step_native_ind) = Hol_reln `
 (* 4.2.13.3 *)
-(!s f' f'' n. (s, f', is) -n-> (s', f'', is', r) ==> (s, f, [Frame n f' is]) -n-> (s', f, [Frame n f'' is'], r)) /\
+(* (!s f' f'' n. (s, f', is) -n-> (s', f'', is', r) ==> (s, f, [Frame n f' is]) -n-> (s', f, [Frame n f'' is'], r)) /\ *)
 (* 4.4.3.1 *)
-(!s f x. (s, f, (vs, Get_local (n2w x) :: es)) -n-> (s, f, (EL x f.locals :: vs, es)) /\
+(!vs es s f x. (s, f, (vs, Plain (Get_local (n2w x)) :: es)) -n-> (s, f, (EL x f.locals :: vs, es), NONE)) /\
 (* 4.4.3.2 *)
-(!s f x v. (s, f, (v :: vs, Set_local (n2w x) :: es)) -n-> (s, (f with locals := LUPDATE v x f.locals), (vs, es))) /\
+(!vs es s f x v. (s, f, (v :: vs, Plain (Set_local (n2w x)) :: es)) -n-> (s, (f with locals := LUPDATE v x f.locals), (vs, es), NONE)) /\
 (* 4.4.3.4 *)
-(!s f x. (s, f, (vs, Get_global (n2w x) :: es)) -n-> (s, f, ((EL (EL x f.module.globaladdrs) s.globals).value :: vs, es))) /\
+(!vs es s f x. (s, f, (vs, Plain (Get_global (n2w x)) :: es)) -n-> (s, f, ((EL (EL x f.module.globaladdrs) s.globals).value :: vs, es), NONE)) /\
 (* 4.4.3.5 *)
-(!s f x a v. a = EL x f.module.globaladdrs ==>
-    (s, f, (v :: vs, Set_global (n2w x) :: es))
+(!vs es s f x a v. a = EL x f.module.globaladdrs ==>
+    (s, f, (v :: vs, Plain (Set_global (n2w x)) :: es))
   -n->
-    (s with globals := LUPDATE ((EL a s.globals) with value := v) a s.globals, f, (vs, es))
+    (s with globals := LUPDATE ((EL a s.globals) with value := v) a s.globals, f, (vs, es), NONE)
 ) /\
 (* 4.4.4.1 *)
 (* First case, for Load without any further arguments. *)
-(!s f t i ma. (s, f, [Const (V_i32 i); Load t NONE ma]) -n-> (s, f, [wrap_option (bytes2val t) (mem_read (mem0 s f) i ma (bit_width t))])) /\ (* TODO: Trapping *)
+(!vs es s f t i ma.
+    (s, f, (i :: vs, Plain (Load t ma) :: es))
+  -n->
+    case mem_load_t s f t ma i of
+      | NONE   => (s, f, (vs, es), SOME (Trap "Invalid load"))
+      | SOME v => (s, f, (v :: vs, es), NONE)
+) /\
 (* Second case, for Load with storage size and sign extension. *)
-(!s f. (s, f, (V_i32 i :: vs, Loadi t (SOME (sz, sx)) ma :: es)) -n-> (s, f, [wrap_option (bytes2val t) (mem_read (mem0 s f) i ma (bit_width_p sz))])) /\ (* TODO: Trapping *)
+(!vs es s f w sz sx ma.
+    (s, f, (i :: vs, Plain (Loadi w sz sx ma) :: es))
+  -n->
+    case mem_load_w_sx s f w sz sx ma i of
+      | NONE   => (s, f, (vs, es), SOME (Trap "Invalid load"))
+      | SOME v => (s, f, (v :: vs, es), NONE)
+) /\
 (* 4.4.4.2 *)
 (* TODO *)
 (* (!s f t v a w ma bs. (c = (s, f, [Const (V_i32 i); Const v; Store t NONE ma]) /\ a = HD f.module.memaddrs /\ t = typeof v /\ w = mem_write (EL a s.mems) i ma (bit_width t) v) ==> *)
@@ -194,7 +206,7 @@ val (step_native_rules, step_native_cases, step_native_ind) = Hol_reln `
 (*     (w = SOME bs ==> c -n-> (s with mems := LUPDATE a (m with data := bs) s.mems), f, []) *)
 (* ) /\ *)
 (* 4.4.4.3 *)
-(!s f. (s, f, (vs, Current_memory :: es)) -n-> (s, f, (V_i32 (n2w (bytes_to_pages (LENGTH (EL (HD f.module.memaddrs) s.mems).data)))) :: vs, es)) /\
+(!vs es s f. (s, f, (vs, Plain Current_memory :: es)) -n-> (s, f, ((V_i32 (n2w (bytes_to_pages (LENGTH (EL (HD f.module.memaddrs) s.mems).data)))) :: vs, es), NONE)) /\
 (* 4.4.5.6 *)
 (* NON PLAIN *)
 (* (!vs es is l holed vs'. *)
@@ -203,30 +215,32 @@ val (step_native_rules, step_native_cases, step_native_ind) = Hol_reln `
 (*     (fine (vs' :: vs) ((MAP Plain is) ++ es)) *)
 (* ) /\ *)
 (* 4.4.5.9 *)
-(!s f vs n k.
+(!s f vs k.
     (s, f, (vs, Frame (LENGTH vs') f (fill_b b k (vs', [Plain Return])) :: es))
   -n->
-    (s, f, (vs' ++ vs, es))
+    (s, f, (vs' ++ vs, es), NONE)
 ) /\
 (* 4.4.6.2 *)
 (* NON PLAIN *)
 (* (!vs es n is vs'. (vs, Label n is (vs', []), es) -s-> (fine (vs' ++ vs) es)) *)
 (* 4.4.5.10 *)
-(!s f x. (s, f, (vs, Plain Call (n2w x) :: es)) -n-> (s, f, (vs, Invoke (EL x f.module.funcaddrs) :: es))) /\
+(!vs es s f x. (s, f, (vs, Plain (Call (n2w x)) :: es)) -n-> (s, f, (vs, Invoke (EL x f.module.funcaddrs) :: es), NONE)) /\
 (* 4.4.5.11 *)
-(!s f x i a.
-    (s, f, (V_i32 (n2w i) :: vs, Call_indirect (n2w x) :: es))
+(!vs es s f x i a.
+    (s, f, (V_i32 (n2w i) :: vs, Plain (Call_indirect (n2w x)) :: es))
   -n->
-    (s, f, if has (EL (HD f.module.tableaddrs) s.tables).elem i (SOME a) /\ has f.module.types x (funcinst_type (EL a s.funcs)) then [Invoke a] else [Trap]) (* TODO: Trapping *)
+    if has (EL (HD f.module.tableaddrs) s.tables).elem i (SOME a) /\ has f.module.types x (funcinst_type (EL a s.funcs))
+    then (s, f, (vs, Invoke a :: es), NONE)
+    else (s, f, (vs, es), SOME (Trap "Invalid Call_indirect"))
 ) /\
 (* 4.4.7.1 *)
 (!s f a t1s t2s m mod code. (has s.funcs a (Native (t1s _> t2s) mod code)) /\ ts = code.locals /\ Expr is = code.body /\ m = LENGTH t2s /\ n = LENGTH t1s ==>
-    (s, f, (vs, Invoke a))
+    (s, f, (vs, Invoke a :: es))
   -n->
-    (s, f, (DROP n vs, Frame m <| module := mod; locals := (TAKE n vs) ++ (MAP zero ts) |> [Block t2s is] :: es))
+    (s, f, (DROP n vs, (Frame m <| module := mod; locals := (TAKE n vs) ++ (MAP zero ts) |> ([], [Plain (Block t2s is)])) :: es), NONE)
 ) /\
 (* 4.4.7.2 *)
-(! s f n vs. ==> (s, f, (vs, Frame (LENGTH vs') f (vs', []) :: es)) -n-> (s, f, (vs' ++ vs, es)))
+(!vs es s f vs'. (s, f, (vs, Frame (LENGTH vs') f (vs', []) :: es)) -n-> (s, f, (vs' ++ vs, es), NONE))
 `
 
 val _ = set_mapped_fixity {
@@ -241,21 +255,21 @@ val _ = set_mapped_fixity {
 }
 val (step_rules, step_cases, step_ind) = Hol_reln `
 (* lift -s-> *)
-(!s f is is'. (s.result = NONE /\ (s.code -s-> (vs, es, r))) ==> s ---> (s with <| code := (vs, es); result := r |>)) /\
+(!vs es s i vs' es' r. ((s.code = (vs, Plain i :: es)) /\ (s.result = NONE /\ (vs, i, es) -s-> (vs', es', r))) ==> s ---> (s with <| code := (vs', es'); result := r |>)) /\
 (* lift -n-> *)
-(!s s' f' c'. (s.result = NONE /\ (s.store, s.frame, vs, es, r) -n-> (s', f', c', r)) ==> s ---> (s with <| store := s'; frame := f'; code := (vs, es); result := r |>)) /\
+(!s s' f' c' r. (s.result = NONE /\ (s.store, s.frame, s.code) -n-> (s', f', c', r)) ==> s ---> (s with <| store := s'; frame := f'; code := (vs, es); result := r |>))
 (* 4.4.7.3 *)
 `
 
-val _ = set_mapped_fixity {
-  fixity    = Infix(NONASSOC, 450),
-  tok       = "-e->",
-  term_name = "step_expr"
-}
-val _ = Hol_reln `
-(!s f is s' f' is'. (s, f, is) ---> (s', f', is') ==>
-    (s, f, Expr is) -e-> (s', f', Expr is')
-)`
+(* val _ = set_mapped_fixity { *)
+(*   fixity    = Infix(NONASSOC, 450), *)
+(*   tok       = "-e->", *)
+(*   term_name = "step_expr" *)
+(* } *)
+(* val _ = Hol_reln ` *)
+(* (!s f is s' f' is'. s, f, is) ---> (s', f', is') ==> *)
+(*     (s, f, Expr is) -e-> (s', f', Expr is') *)
+(* )` *)
 
 val _ = set_mapped_fixity {
   fixity    = Infix(NONASSOC, 450),
@@ -267,6 +281,6 @@ val _ = set_mapped_fixity {
   tok       = "↪*",
   term_name = "step_closure"
 }
-val step_closure_def = Define `(!a. a --->* a) /\ (!a b c. (a ---> b /\ b ---> c) ==> (a --->* c))`
+val (step_closure_rules, step_closure_cases, step_closure_ind) = Hol_reln `(!a. a --->* a) /\ (!a b c. (a ---> b /\ b ---> c) ==> (a --->* c))`
 
 val _ = export_theory ()

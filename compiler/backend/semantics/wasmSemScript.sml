@@ -16,7 +16,6 @@
 
 open preamble wasmSemanticPrimitivesTheory
 
-val _ = patternMatchesLib.ENABLE_PMATCH_CASES()
 val _ = ParseExtras.tight_equality()
 
 val _ = new_theory "wasmSem"
@@ -43,14 +42,14 @@ expand s vs es =
       let (vs', es') = s.code in
           if LENGTH vs < LENGTH vs' \/ LENGTH es > 1 then (* No. instructions does not change, no. results increases. *)
               if s.clock = 0n then (SOME Timeout, s)
-              else (NONE, s with <| clock := (s.clock - 1n); code := (vs, es ++ es') |>)
-          else (NONE, s with code := (vs, es ++ es'))`
+              else (NONE, s with <| clock := (s.clock - 1n); code := (vs, es ++ (TL es')) |>)
+          else (NONE, s with code := (vs, es ++ (TL es')))`
 
 (* Same as above, but for a singleton instruction (this is more common). *)
 val effect_def = Define `effect s vs e = expand s vs [e]`
 
 (* Helper function for executing instructions that only alter the result. *)
-val resulting_def = Define `resulting s vs' = let (vs, es) = s.code in (NONE, s with code := (vs', (TL es)))`
+val resulting_def = Define `resulting s vs' = expand s vs' []`
 
 val typ_assert = Define `
   typ_assert msg cond (r, s) = ((if cond then r else SOME (TypeError msg)), s)`
@@ -139,14 +138,14 @@ val evaluate_small_def = Define `
       (* 4.4.3  Variable Instructions *)
 
       (* 4.4.3.1 *)
-      | vs, Get_local (n2w x) =>
-        typ_assert "4.4.3.1.2" (x < LENGTH s.frame.locals)
-          (resulting s ((EL x s.frame.locals) :: vs))
+      | vs, Get_local x =>
+        typ_assert "4.4.3.1.2" ((w2n x) < LENGTH s.frame.locals)
+          (resulting s ((EL (w2n x) s.frame.locals) :: vs))
 
       (* 4.4.3.2 *)
-      | v :: vs', Set_local (n2w x) =>
-        typ_assert "4.4.3.2.2" (x < LENGTH s.frame.locals)
-          (resulting (s with frame := (s.frame with locals := (LUPDATE v x s.frame.locals))) vs')
+      | v :: vs', Set_local x =>
+        typ_assert "4.4.3.2.2" ((w2n x) < LENGTH s.frame.locals)
+          (resulting (s with frame := (s.frame with locals := (LUPDATE v (w2n x) s.frame.locals))) vs')
 
       (* 4.4.3.3 *)
       | c :: vs', Tee_local x =>
@@ -154,17 +153,17 @@ val evaluate_small_def = Define `
         effect s (c :: c :: vs') (Plain (Set_local x))
 
       (* 4.4.3.4 *)
-      | vs, Get_global (n2w x) =>
-        typ_assert "4.4.3.4.2" (x < LENGTH s.frame.module.globaladdrs)
-          (let a = EL x s.frame.module.globaladdrs in
+      | vs, Get_global x =>
+        typ_assert "4.4.3.4.2" ((w2n x) < LENGTH s.frame.module.globaladdrs)
+          (let a = EL (w2n x) s.frame.module.globaladdrs in
              typ_assert "4.4.3.4.4" (a < LENGTH s.store.globals)
                (resulting s ((EL a s.store.globals).value :: vs))
           )
 
       (* 4.4.3.5 *)
-      | v :: vs', Set_global (n2w x) =>
-        typ_assert "4.4.3.5.2" (x < LENGTH s.frame.module.globaladdrs)
-          (let a = EL x s.frame.module.globaladdrs in
+      | v :: vs', Set_global x =>
+        typ_assert "4.4.3.5.2" ((w2n x) < LENGTH s.frame.module.globaladdrs)
+          (let a = EL (w2n x) s.frame.module.globaladdrs in
             typ_assert "4.4.3.5.4" (a < LENGTH s.store.globals)
               (let glob = EL a s.store.globals in
                 typ_assert "Cannot set immutable global" (glob.mut = T_var)
@@ -176,28 +175,27 @@ val evaluate_small_def = Define `
 
       (* 4.4.4.1 *)
       | i :: vs', Load t ma =>
-        (case mem_load s.store s.frame i ma (bit_width t) of
-           | SOME bs => resulting s ((bytes2val t bs) :: vs')
-           | NONE    => (SOME (Trap "Bad load instruction"), s)
+        (case mem_load_t s.store s.frame t ma i of
+           | SOME v => resulting s (v :: vs')
+           | NONE   => (SOME (Trap "Bad load instruction"), s)
         )
-
-      (* TODO: Take care about sx! *)
       | i :: vs', Loadi w tp sx ma =>
-        (case mem_load s.store s.frame i ma (bit_width_p tp) of
-           | SOME bs => resulting s ((bytes2val (Tv Ki w) bs) :: vs')
-           | NONE    => (SOME (Trap "Bad load instruction"), s)
+        (case mem_load_w_sx s.store s.frame w tp sx ma i of
+           | SOME v => resulting s (v :: vs')
+           | NONE   => (SOME (Trap "Bad load instruction"), s)
         )
 
       (* 4.4.4.2 *)
-      | i :: v :: vs', Store t ma =>
-        (case mem_store s.store s.frame i ma (bit_width (typeof v)) (val2bytes v) of
-           | SOME s' => resulting (s with store := s') vs'
-           | NONE => (SOME (Trap "Bad store instruction"), s))
+      (* TODO: Write a store function that avoids unbounded 'a word. *)
+      (* | i :: v :: vs', Store t ma => *)
+      (*   (case mem_store s.store s.frame (bit_width (typeof v)) ma i (val2w v) of *)
+      (*      | SOME s' => resulting (s with store := s') vs' *)
+      (*      | NONE => (SOME (Trap "Bad store instruction"), s)) *)
 
-      | i :: v :: vs', Storei w tp ma =>
-        (case mem_store s.store s.frame i ma (bit_width_p tp) (val2bytes v) of
-           | SOME s' => resulting (s with store := s') vs'
-           | NONE => (SOME (Trap "Bad store instruction"), s))
+      (* | i :: v :: vs', Storei w tp ma => *)
+      (*   (case mem_store s.store s.frame (bit_width_p tp) ma i (val2w v) of *)
+      (*      | SOME s' => resulting (s with store := s') vs' *)
+      (*      | NONE => (SOME (Trap "Bad store instruction"), s)) *)
 
       (* 4.4.4.3 *)
       | vs, Current_memory =>
@@ -243,26 +241,26 @@ val evaluate_small_def = Define `
         effect s vs' (Plain (Br l))
 
       (* 4.4.5.8 *)
-      | V_i32 (n2w i) :: vs', Br_table ls ln =>
+      | V_i32 i :: vs', Br_table ls ln =>
         let nls = to_list ls in
-         effect s vs' (Plain (Br (if i < LENGTH nls then EL i nls else ln)))
+         effect s vs' (Plain (Br (if w2n i < LENGTH nls then EL (w2n i) nls else ln)))
 
       (* 4.4.5.9 [moved-down] *)
 
       (* 4.4.5.10 *)
-      | vs, Call (n2w x) =>
-        typ_assert "4.4.5.10.2" (x < LENGTH s.frame.module.funcaddrs)
-          (effect s vs (Invoke (EL x s.frame.module.funcaddrs)))
+      | vs, Call x =>
+        typ_assert "4.4.5.10.2" ((w2n x) < LENGTH s.frame.module.funcaddrs)
+          (effect s vs (Invoke (EL (w2n x) s.frame.module.funcaddrs)))
 
       (* 4.4.5.11 *)
-      | V_i32 (n2w i) :: vs', Call_indirect (n2w x) =>
+      | V_i32 i :: vs', Call_indirect x =>
         let tab = get_table s.store s.frame in
-          typ_assert "4.4.4.5.11.10" (i < LENGTH tab)
-            (case EL i tab of
+          typ_assert "4.4.4.5.11.10" ((w2n x) < LENGTH tab)
+            (case EL (w2n i) tab of
                | NONE => (SOME (TypeError "4.4.5.11.11"), s)
                | SOME a =>
                  typ_assert "4.4.5.11.13" (a < LENGTH s.store.funcs)
-                   if funcinst_type (EL a s.store.funcs) <> (EL x s.frame.module.types)
+                   if funcinst_type (EL a s.store.funcs) <> (EL (w2n x) s.frame.module.types)
                    then (SOME (Trap "4.4.5.11.16"), s)
                    else effect s vs' (Invoke a)
             )
@@ -272,12 +270,14 @@ val evaluate_small_def = Define `
     )
 
     (* 4.4.5.6 *)
-    | vs, Label (LENGTH vs') is (fill_b l holed (vs', [Plain (Br (n2w l))])) =>
-      expand s vs ((MAP Plain is) ++ es)
+    (* TODO: Get rid of fill_b. *)
+    (* | vs, Label (LENGTH vs') is (fill_b l holed (vs', [Plain (Br (n2w l))])) => *)
+    (*   expand s (vs' ++ vs) (MAP Plain is) *)
 
     (* 4.4.5.9 *)
-    | vs, Frame (LENGTH vs') s.frame (fill_b b k (vs', [Plain Return])) =>
-      resulting s (vs' ++ vs)
+    (* TODO: Get rid of fill_b. *)
+    (* | vs, Frame (LENGTH vs') s.frame (fill_b b k (vs', [Plain Return])) => *)
+    (*   resulting s (vs' ++ vs) *)
 
     (* 4.4.6.2 *)
     | vs, Label n is (vs', []) =>
@@ -300,20 +300,21 @@ val evaluate_small_def = Define `
 
            (* 4.4.7.3 *)
            (* NOTE: We assume that any host function is of type [i32] ^ 4 -> []. *)
-           | Host hf => (case vs of
-             | V_i32 (n2w len2) :: V_i32 (n2w ptr2) :: V_i32 (n2w len1) :: V_i32 (n2w ptr1) :: vs' =>
-               let rbs = read_mem s.store s.frame in
-               case (rbs ptr1 len1, rbs ptr2 len2) of
-                 | SOME b1s, SOME b2s => (case call_FFI s.ffi hf b1s b2s of
-                   | FFI_final outcome => (SOME (FinalFFI outcome), s)
-                   | FFI_return new_ffi new_bytes => (case write_mem s.store s.frame ptr1 new_bytes of
-                     | SOME s' => resulting (s with <| ffi := new_ffi; store := s' |>) vs'
-                     | NONE    => (SOME (Trap "Host function wants to write out of bounds"), s)
-                   )
-                 )
-                 | _ => (SOME (Trap "Host function arguments out of bounds"), s)
-             | _ => (SOME (TypeError "Host function expects four i32 arguments"), s)
-           )
+           (* TODO: This case explodes. Assert i32^4 separately. *)
+           (* | Host (ForeignFunction name) => (case vs of *)
+           (*   | V_i32 (n2w len2) :: V_i32 (n2w ptr2) :: V_i32 (n2w len1) :: V_i32 (n2w ptr1) :: vs' => *)
+           (*     let rbs = read_mem s.store s.frame in *)
+           (*    case (rbs ptr1 len1, rbs ptr2 len2) of *)
+           (*       | SOME b1s, SOME b2s => (case call_FFI s.ffi name b1s b2s of *)
+           (*         | FFI_final outcome => (SOME (FinalFFI outcome), s) *)
+           (*         | FFI_return new_ffi new_bytes => (case write_mem s.store s.frame ptr1 new_bytes of *)
+           (*           | SOME s' => resulting (s with <| ffi := new_ffi; store := s' |>) vs' *)
+           (*           | NONE    => (SOME (Trap "Host function wants to write out of bounds"), s) *)
+           (*         ) *)
+           (*       ) *)
+           (*       | _ => (SOME (Trap "Host function arguments out of bounds"), s) *)
+           (*   | _ => (SOME (TypeError "Host function expects four i32 arguments"), s) *)
+           (* ) *)
         )
 
     (* 4.4.7.2 *)
@@ -326,19 +327,24 @@ val evaluate_small_def = Define `
 `
 
 val wrap_result = Define `
-wrap_result [    ]    = Result NONE /\
-wrap_result [x   ]    = Result (SOME x) /\
-wrap_result [x; y]::t = TypeError "Expected result of at most one value"`
+  wrap_result l = case LENGTH l of
+    | 0 => Result NONE
+    | 1 => Result (SOME (HD l))
+    | _ => TypeError "Expected result of at most one value"`
 
-val evaluate_def = tDefine "evaluate" `
-  evaluate s = let (vs, es) = s.code in case (vs, es) of
+val evaluate_wasm_def = tDefine "evaluate_wasm" `
+  evaluate_wasm s = case s.code of
     | vs, [] => (wrap_result vs, s)
     | vs, es => case evaluate_small s of
       | SOME r', s' => (r', s')
-      | NONE   , s' => evaluate s'
+      | NONE   , s' => evaluate_wasm s'
 `
+(
+  WF_REL_TAC `inv_image ($< LEX $< LEX $<) (\s. (s.clock, LENGTH (FST s.code), LENGTH (SND s.code)))` >>
+  REWRITE_TAC[evaluate_small_def] >> rpt strip_tac >> rfs [] >>
+  cheat
+)
 
 (* TODO: Do we need something like evaluate_expression? *)
-
 
 val _ = export_theory()

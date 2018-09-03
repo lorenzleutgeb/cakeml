@@ -61,11 +61,7 @@ val _ = Datatype `moduleinst =
 
 (* 4.2.6  Function Instances
  *
- * NOTE: For CakeML, host functions coincide with foreign functions:
- *
- * To refer to the foreign function that implements a given host function
- * (when invoking call_ffi) we need its name: Using `:string` as `:hostfunc`
- * suits.
+ * For CakeML, we introduce host functions that refer to foreign functions.
  *
  * The two input parameters (both of type (word8 list)) are to be passed via the stack,
  * just as with a normal invocation, this is specified in 4.4.7.3. However, we need to
@@ -78,14 +74,18 @@ val _ = Datatype `moduleinst =
  *
  * The second memory region is modified in place.
  *)
+
 val _ = Datatype `
-funcinst =
-   | Native functype moduleinst func
-   | Host   string`
+  hostfunc = ForeignFunction string`
+
+val _ = Datatype `
+  funcinst =
+    | Native functype moduleinst func
+    | Host   hostfunc`
 
 val funcinst_type_def = Define `
-funcinst_type (Native tf m f) = tf /\
-funcinst_type (Host s)        = Tf [T_i32; T_i32; T_i32; T_i32] []`
+funcinst_type (Native tf m f)            = tf /\
+funcinst_type (Host (ForeignFunction s)) = Tf [T_i32; T_i32; T_i32; T_i32] []`
 
 (* 4.2.7  Table Instances *)
 val _ = type_abbrev("funcelem", ``:(funcaddr option)``)
@@ -318,8 +318,27 @@ val write_mem_def = Define `
 (* NOTE: memarg.align does not affect the semantics, see note at 4.4.4. *)
 val mem_range = Define `mem_range i ma n = ((w2n i) + (w2n ma.offset), n DIV 8)`
 
-val mem_load_def = Define `mem_load s f (V_i32 i) ma n = let (ptr, len) = mem_range i ma n in read_mem s f len ptr`
-val mem_store_def = Define `mem_store s f (V_i32 i) ma n bs = let (ptr, len) = mem_range i ma n in write_mem s f ptr bs`
+val mem_load_def = Define `mem_load s f n ma (V_i32 i) = let (ptr, len) = mem_range i ma n in read_mem s f len ptr`
+val mem_store_def = Define `mem_store s f n ma (V_i32 i) bs = let (ptr, len) = mem_range i ma n in (write_mem s f ptr (w2bs bs))`
+
+val mem_load_t_n_def = Define `
+mem_load_t_n s f T_i32 n ma i = OPTION_MAP (V_i32 o bs2w) (mem_load s f n ma i) /\
+mem_load_t_n s f T_i64 n ma i = OPTION_MAP (V_i64 o bs2w) (mem_load s f n ma i) /\
+mem_load_t_n s f T_f32 n ma i = OPTION_MAP (V_f32 o fp32_to_float o bs2w) (mem_load s f n ma i) /\
+mem_load_t_n s f T_f64 n ma i = OPTION_MAP (V_f64 o fp64_to_float o bs2w) (mem_load s f n ma i)
+`
+
+val mem_load_t_def = Define `mem_load_t s f t ma i = mem_load_t_n s f t (bit_width t) ma i`
+
+val mem_load_w_sx_def = Define `
+mem_load_w_sx s f w tp U ma i = mem_load_t_n s f (Tv Ki w) (bit_width_p tp) ma i /\
+mem_load_w_sx s f W32 Tp_i8 S ma i = OPTION_MAP (\x.((V_i32 o i2w o w2i) ((bs2w x):word8))) (mem_load s f 8 ma i) /\
+mem_load_w_sx s f W32 Tp_i16 S ma i = OPTION_MAP (\x.((V_i32 o i2w o w2i) ((bs2w x):word16))) (mem_load s f 16 ma i) /\
+mem_load_w_sx s f W32 Tp_i32 S ma i = OPTION_MAP (\x.((V_i32 o i2w o w2i) ((bs2w x):word32))) (mem_load s f 32 ma i) /\
+mem_load_w_sx s f W64 Tp_i8 S ma i = OPTION_MAP (\x.((V_i64 o i2w o w2i) ((bs2w x):word8))) (mem_load s f 8 ma i) /\
+mem_load_w_sx s f W64 Tp_i16 S ma i = OPTION_MAP (\x.((V_i64 o i2w o w2i) ((bs2w x):word16))) (mem_load s f 16 ma i) /\
+mem_load_w_sx s f W64 Tp_i32 S ma i = OPTION_MAP (\x.((V_i64 o i2w o w2i) ((bs2w x):word32))) (mem_load s f 32 ma i)
+`
 
 (* Results are the same for both semantics. *)
 val _ = Datatype `
