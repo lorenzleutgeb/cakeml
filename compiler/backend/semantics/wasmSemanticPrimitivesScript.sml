@@ -125,6 +125,10 @@ val _ = Datatype `
 
     | Label num (instr list) ((val list) # (ainstr list))
     | Frame num frame        ((val list) # (ainstr list))
+
+    (* For functional semantics. *)
+    | Breaking   num  (val list) (* c.f. fill_b *)
+    | Returning (*1*) (val list) (* c.f. fill_e *)
 `
 
 val _ = type_abbrev("code", ``:((val list) # (ainstr list))``)
