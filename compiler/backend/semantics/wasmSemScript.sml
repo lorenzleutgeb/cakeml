@@ -82,6 +82,15 @@ wrap_result l = case LENGTH l of
                   | 1 => Result (SOME (HD l))
                   | _ => TypeError "Expected result of at most one value"`
 
+(* NOTE: We assume that any host function corresponding to a
+ * foreign functionis of type [i32] ^ 4 -> []. *)
+val match_ffi_args_def = Define `
+  match_ffi_args vs = case vs of
+    | V_i32 len2 :: V_i32 ptr2 :: V_i32 len1 :: V_i32 ptr1 :: vs' =>
+      (SOME (((w2n ptr1, w2n len1), (w2n ptr2, w2n len2)), vs'))
+    | _ =>
+      NONE`
+
 (* NOTE: Traps are not bubbled up through reductions but returned directly! *)
 val evaluate_small_def = tDefine "evaluate_small" `
   evaluate_small s = case s.code of
@@ -350,26 +359,22 @@ val evaluate_small_def = tDefine "evaluate_small" `
                 ))
             )
 
-            | _ => (SOME (TypeError "TODO TODO TODO"), s)
             (* 4.4.7.3 *)
-            (* NOTE: We assume that any host function is of type [i32] ^ 4 -> []. *)
-            (* TODO: This case explodes. Assert i32^4 separately. *)
-            (* | Host (ForeignFunction name) => (case vs of *)
-            (*   | V_i32 (n2w len2) :: V_i32 (n2w ptr2) :: V_i32 (n2w len1) :: V_i32 (n2w ptr1) :: vs' => *)
-            (*     let rbs = read_mem s.store s.frame in *)
-            (*    case (rbs ptr1 len1, rbs ptr2 len2) of *)
-            (*       | SOME b1s, SOME b2s => (case call_FFI s.ffi name b1s b2s of *)
-            (*         | FFI_final outcome => (SOME (FinalFFI outcome), s) *)
-            (*         | FFI_return new_ffi new_bytes => (case write_mem s.store s.frame ptr1 new_bytes of *)
-            (*           | SOME s' => resulting (s with <| ffi := new_ffi; store := s' |>) vs' *)
-            (*           | NONE    => (SOME (Trap "Host function wants to write out of bounds"), s) *)
-            (*         ) *)
-            (*       ) *)
-            (*       | _ => (SOME (Trap "Host function arguments out of bounds"), s) *)
-            (*   | _ => (SOME (TypeError "Host function expects four i32 arguments"), s) *)
-            (* ) *)
+            | Host (ForeignFunction name) =>
+              case match_ffi_args vs of
+                | NONE => (SOME (TypeError "4.4.7.3"), s)
+                | SOME (((ptr1, len1), (ptr2, len2)), vs') =>
+                  let rbs = read_mem s.store s.frame in
+                    case (rbs ptr1 len1, rbs ptr2 len2) of
+                      | SOME b1s, SOME b2s => (case call_FFI s.ffi name b1s b2s of
+                        | FFI_final outcome => (SOME (FinalFFI outcome), s)
+                        | FFI_return new_ffi new_bytes => (case write_mem s.store s.frame ptr1 new_bytes of
+                          | SOME s' => resulting (s with <| ffi := new_ffi; store := s' |>) vs'
+                          | NONE    => (SOME (Trap "Host function wants to write out of bounds"), s)
+                        )
+                      )
+                      | _ => (SOME (Trap "Host function arguments out of bounds"), s)
           )
-
       (* 4.4.7.2 *)
       | vs, Frame n f (vs', []) =>
         resulting s (vs' ++ vs)
@@ -388,10 +393,15 @@ val evaluate_small_progress = Q.store_thm("evaluate_small_progress",
   Cases_on `s.code` >> rename [`s.code = (vs, es)`] >>
   Cases_on `es` >> ONCE_REWRITE_TAC [evaluate_small_def] >> simp [] >> rename [`s.code = (vs, e :: es)`] >>
   Cases_on `e` >> simp []
-  >- (simp_tac (srw_ss () ++ boolSimps.COND_elim_ss) [AllCaseEqs (), PULL_EXISTS] >> rw[resulting_def,effect_def] >> TRY (drule expand_dec) >> simp [])
-  >- (simp [AllCaseEqs ()] >> rw[effect_def] >> (drule expand_dec) >> simp [])
-  >- (simp [AllCaseEqs ()] >> rw[effect_def,resulting_def] >> TRY (drule expand_dec) >> simp [])
-  >- (simp [AllCaseEqs ()] >> rw[effect_def,resulting_def] >> TRY (drule expand_dec) >> simp[wasmSemanticPrimitivesTheory.ainstr_size_def,pairTheory.LEX_DEF])
+  >- (simp_tac (srw_ss () ++ boolSimps.COND_elim_ss) [AllCaseEqs (), PULL_EXISTS] >> rw[resulting_def,effect_def] >> TRY (drule expand_dec) >>
+      simp [])
+  >- (simp [AllCaseEqs ()] >> rw[effect_def]               >> TRY (drule expand_dec) >>
+      simp [] >> fs [resulting_def]                        >> TRY (drule expand_dec) >>
+      simp [wasmSemanticPrimitivesTheory.ainstr_size_def,pairTheory.LEX_DEF])
+  >- (simp [AllCaseEqs ()] >> rw[effect_def,resulting_def] >> TRY (drule expand_dec) >>
+      simp [])
+  >- (simp [AllCaseEqs ()] >> rw[effect_def,resulting_def] >> TRY (drule expand_dec) >>
+      simp [wasmSemanticPrimitivesTheory.ainstr_size_def,pairTheory.LEX_DEF])
 )
 
 val evaluate_wasm_def = tDefine "evaluate_wasm" `
