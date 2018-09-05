@@ -72,17 +72,6 @@ val evaluate_nomatch_eq_none = Q.store_thm("evaluate_nomatch_eq_none[simp]",
   simp[evaluate_nomatch_def]
 )
 
-val wrap_result_def = Define `
-  wrap_result l = if LENGTH l <= 1
-                  then Result (oHD l)
-                  else TypeError "Expected result of at most one value"
-`
-
-val wrap_result_eq_result = Q.store_thm("wrap_result_eq_result[simp]",
-  `LENGTH l < 2 ==> wrap_result l = Result (oHD l)`,
-  rw [wrap_result_def]
-)
-
 (* NOTE: We assume that any host function corresponding to a
  * foreign functionis of type [i32] ^ 4 -> []. *)
 val match_ffi_args_def = Define `

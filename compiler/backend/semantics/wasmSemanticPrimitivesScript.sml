@@ -382,4 +382,15 @@ val _ = Datatype `
     | Timeout
     | FinalFFI final_event`
 
+val wrap_result_def = Define `
+  wrap_result l = if LENGTH l <= 1
+                  then Result (oHD l)
+                  else TypeError "Expected result of at most one value"
+`
+
+val wrap_result_eq_result = Q.store_thm("wrap_result_eq_result[simp]",
+  `LENGTH l < 2 ==> wrap_result l = Result (oHD l)`,
+  rw [wrap_result_def]
+)
+
 val _ = export_theory()

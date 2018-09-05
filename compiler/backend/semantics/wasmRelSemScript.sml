@@ -177,6 +177,7 @@ val _ = set_mapped_fixity {
   term_name = "step_native"
 }
 val (step_native_rules, step_native_cases, step_native_ind) = Hol_reln `
+(!s f vs. (s, f, (vs, [])) -n-> (s, f, (vs, []), SOME (wrap_result vs))) /\
 (* 4.2.13.3 *)
 (!s f f' f'' n c c' r vs es.
     (s, f', c) -n-> (s', f'', c', r)
