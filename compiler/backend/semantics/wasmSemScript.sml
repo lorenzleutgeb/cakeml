@@ -392,16 +392,8 @@ val evaluate_small_progress = Q.store_thm("evaluate_small_progress",
   ho_match_mp_tac (theorem "evaluate_small_ind") >> rpt gen_tac >> strip_tac >>
   Cases_on `s.code` >> rename [`s.code = (vs, es)`] >>
   Cases_on `es` >> ONCE_REWRITE_TAC [evaluate_small_def] >> simp [] >> rename [`s.code = (vs, e :: es)`] >>
-  Cases_on `e` >> simp []
-  >- (simp_tac (srw_ss () ++ boolSimps.COND_elim_ss) [AllCaseEqs (), PULL_EXISTS] >> rw[resulting_def,effect_def] >> TRY (drule expand_dec) >>
-      simp [])
-  >- (simp [AllCaseEqs ()] >> rw[effect_def]               >> TRY (drule expand_dec) >>
-      simp [] >> fs [resulting_def]                        >> TRY (drule expand_dec) >>
-      simp [wasmSemanticPrimitivesTheory.ainstr_size_def,pairTheory.LEX_DEF])
-  >- (simp [AllCaseEqs ()] >> rw[effect_def,resulting_def] >> TRY (drule expand_dec) >>
-      simp [])
-  >- (simp [AllCaseEqs ()] >> rw[effect_def,resulting_def] >> TRY (drule expand_dec) >>
-      simp [wasmSemanticPrimitivesTheory.ainstr_size_def,pairTheory.LEX_DEF])
+  simp_tac (srw_ss () ++ boolSimps.COND_elim_ss) [AllCaseEqs (), PULL_EXISTS] >> rw [resulting_def,effect_def] >>
+  TRY (drule expand_dec) >> simp [wasmSemanticPrimitivesTheory.ainstr_size_def,pairTheory.LEX_DEF]
 )
 
 val evaluate_wasm_def = tDefine "evaluate_wasm" `
