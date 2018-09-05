@@ -296,10 +296,10 @@ wraps_false v = case v of (V_i32 0w) => T | _ => F`
 val arguments_ok = Define `arguments_ok vs (Tf ts rt) = LIST_REL (\v t. t = typeof v) vs ts`
 
 val zero_def = Define `
-zero T_i32 = V_i32 0w /\
-zero T_i64 = V_i64 0w /\
-zero T_f32 = V_f32 (fp32_to_float 0w) /\
-zero T_f64 = V_f64 (fp64_to_float 0w)`
+zero (Tv Ki W32) = V_i32 0w /\
+zero (Tv Ki W64) = V_i64 0w /\
+zero (Tv Kf W32) = V_f32 (fp32_to_float 0w) /\
+zero (Tv Kf W64) = V_f64 (fp64_to_float 0w)`
 
 val has_def = Define `has xs i x = (i < (LENGTH xs) /\ EL i xs = x)`
 
@@ -326,10 +326,10 @@ val mem_range = Define `mem_range i ma n = ((w2n i) + (w2n ma.offset), n DIV 8)`
 val mem_load_def = Define `mem_load s f n ma (V_i32 i) = let (ptr, len) = mem_range i ma n in read_mem s f len ptr`
 
 val mem_load_t_n_def = Define `
-mem_load_t_n s f T_i32 n ma i = OPTION_MAP (V_i32 o bs2w) (mem_load s f n ma i) /\
-mem_load_t_n s f T_i64 n ma i = OPTION_MAP (V_i64 o bs2w) (mem_load s f n ma i) /\
-mem_load_t_n s f T_f32 n ma i = OPTION_MAP (V_f32 o fp32_to_float o bs2w) (mem_load s f n ma i) /\
-mem_load_t_n s f T_f64 n ma i = OPTION_MAP (V_f64 o fp64_to_float o bs2w) (mem_load s f n ma i)
+mem_load_t_n s f (Tv Ki W32) n ma i = OPTION_MAP (V_i32 o bs2w) (mem_load s f n ma i) /\
+mem_load_t_n s f (Tv Ki W64) n ma i = OPTION_MAP (V_i64 o bs2w) (mem_load s f n ma i) /\
+mem_load_t_n s f (Tv Kf W32) n ma i = OPTION_MAP (V_f32 o fp32_to_float o bs2w) (mem_load s f n ma i) /\
+mem_load_t_n s f (Tv Kf W64) n ma i = OPTION_MAP (V_f64 o fp64_to_float o bs2w) (mem_load s f n ma i)
 `
 
 val mem_load_t_def = Define `mem_load_t s f t ma i = mem_load_t_n s f t (bit_width t) ma i`

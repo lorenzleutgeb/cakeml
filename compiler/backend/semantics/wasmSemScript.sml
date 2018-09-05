@@ -318,6 +318,10 @@ val evaluate_small_def = tDefine "evaluate_small" `
       | vs, Label n is (vs', []) =>
         resulting s (vs' ++ vs)
 
+      (* 4.4.7.2 *)
+      | vs, Frame n f (vs', []) =>
+        resulting s (vs' ++ vs)
+
       (* 4.2.13.3 *)
       (* Recursion to evaluate what's inside a frame. *)
       | vs, Frame n f c =>
@@ -367,10 +371,6 @@ val evaluate_small_def = tDefine "evaluate_small" `
                       )
                       | _ => (SOME (Trap "Host function arguments out of bounds"), s)
           )
-      (* 4.4.7.2 *)
-      | vs, Frame n f (vs', []) =>
-        resulting s (vs' ++ vs)
-
       | vs, es =>
         evaluate_nomatch s
 `
