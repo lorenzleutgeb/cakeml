@@ -128,9 +128,9 @@ val wasm_width_def = Define `wasm_width a = if dimword(a) <= dimword(:32) then W
 (* 2.3.1.1  Conventions *)
 val bit_width_def = Define `bit_width (Tv k W32) = 32n /\ bit_width (Tv k W64) = 64n`
 
-val _ = Datatype `tp = Tp_i8 | Tp_i16 | Tp_i32`
+val _ = Datatype `sz = S8 | S16 | S32`
 
-val bit_width_p_def = Define `bit_width_p Tp_i8 = 8n /\ bit_width_p Tp_i16 = 16n /\ bit_width_p Tp_i32 = 32n`
+val bit_width_p_def = Define `bit_width_p S8 = 8n /\ bit_width_p S16 = 16n /\ bit_width_p S32 = 32n`
 
 (* 2.3.2  Result Types *)
 (* TODO: This may be a bit too general. Currently,
@@ -248,8 +248,8 @@ val _ = Datatype `
     | Load   valtype       memarg
     | Store  valtype       memarg
     (* Loadi and Storei are only applicable to integers and use reduced width through tp. *)
-    | Loadi  width   tp sx memarg
-    | Storei width   tp    memarg
+    | Loadi  width   sz sx memarg
+    | Storei width   sz    memarg
     | Current_memory
     | Grow_memory
 (* 2.4.5  Control Instructions *)

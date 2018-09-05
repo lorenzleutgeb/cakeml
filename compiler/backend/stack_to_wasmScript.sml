@@ -150,11 +150,11 @@ val _ = Define `
       | Mem Load   r (Addr a w) =>
         (get_reg a) ++ (autowrap width) ++ [Load (Tv Ki width) <| offset := (w2w w); align := 0w |>] ++ (set_reg r)
       | Mem Load8  r (Addr a w) =>
-        (get_reg a) ++ (autowrap width) ++ [Loadi width Tp_i8 U <| offset := (w2w w); align := 0w |>] ++ (set_reg r)
+        (get_reg a) ++ (autowrap width) ++ [Loadi width S8 U <| offset := (w2w w); align := 0w |>] ++ (set_reg r)
       | Mem Store  r (Addr a w) =>
         (get_reg r) ++ (get_reg a) ++ (autowrap width) ++ [Store (Tv Ki width) <| offset := (w2w w); align := 0w |>]
       | Mem Store8 r (Addr a w) =>
-        (get_reg r) ++ (get_reg a) ++ (autowrap width) ++ [Storei width Tp_i8 <| offset := (w2w w); align := 0w |>] ++ (set_reg r)
+        (get_reg r) ++ (get_reg a) ++ (autowrap width) ++ [Storei width S8 <| offset := (w2w w); align := 0w |>] ++ (set_reg r)
       | FP (FPLess r d1 d2) =>
         (get_fp_reg d1) ++ (get_fp_reg d2) ++ [Relop_f W64 Ltf] ++ (set_reg r)
       | FP (FPLessEqual r d1 d2) =>

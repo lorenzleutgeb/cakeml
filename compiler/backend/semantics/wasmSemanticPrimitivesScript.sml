@@ -323,7 +323,6 @@ val write_mem_def = Define `
 val mem_range = Define `mem_range i ma n = ((w2n i) + (w2n ma.offset), n DIV 8)`
 
 val mem_load_def = Define `mem_load s f n ma (V_i32 i) = let (ptr, len) = mem_range i ma n in read_mem s f len ptr`
-val mem_store_def = Define `mem_store s f n ma (V_i32 i) bs = let (ptr, len) = mem_range i ma n in (write_mem s f ptr (w2bs bs))`
 
 val mem_load_t_n_def = Define `
 mem_load_t_n s f T_i32 n ma i = OPTION_MAP (V_i32 o bs2w) (mem_load s f n ma i) /\
@@ -334,14 +333,34 @@ mem_load_t_n s f T_f64 n ma i = OPTION_MAP (V_f64 o fp64_to_float o bs2w) (mem_l
 
 val mem_load_t_def = Define `mem_load_t s f t ma i = mem_load_t_n s f t (bit_width t) ma i`
 
-val mem_load_w_sx_def = Define `
-mem_load_w_sx s f w tp U ma i = mem_load_t_n s f (Tv Ki w) (bit_width_p tp) ma i /\
-mem_load_w_sx s f W32 Tp_i8 S ma i = OPTION_MAP (\x.((V_i32 o i2w o w2i) ((bs2w x):word8))) (mem_load s f 8 ma i) /\
-mem_load_w_sx s f W32 Tp_i16 S ma i = OPTION_MAP (\x.((V_i32 o i2w o w2i) ((bs2w x):word16))) (mem_load s f 16 ma i) /\
-mem_load_w_sx s f W32 Tp_i32 S ma i = OPTION_MAP (\x.((V_i32 o i2w o w2i) ((bs2w x):word32))) (mem_load s f 32 ma i) /\
-mem_load_w_sx s f W64 Tp_i8 S ma i = OPTION_MAP (\x.((V_i64 o i2w o w2i) ((bs2w x):word8))) (mem_load s f 8 ma i) /\
-mem_load_w_sx s f W64 Tp_i16 S ma i = OPTION_MAP (\x.((V_i64 o i2w o w2i) ((bs2w x):word16))) (mem_load s f 16 ma i) /\
-mem_load_w_sx s f W64 Tp_i32 S ma i = OPTION_MAP (\x.((V_i64 o i2w o w2i) ((bs2w x):word32))) (mem_load s f 32 ma i)
+val mem_load_sz_sx_def = Define `
+mem_load_sz_sx s f w tp U ma i = mem_load_t_n s f (Tv Ki w) (bit_width_p tp) ma i /\
+mem_load_sz_sx s f W32 S8 S ma i = OPTION_MAP (\x.((V_i32 o i2w o w2i) ((bs2w x):word8))) (mem_load s f 8 ma i) /\
+mem_load_sz_sx s f W32 S16 S ma i = OPTION_MAP (\x.((V_i32 o i2w o w2i) ((bs2w x):word16))) (mem_load s f 16 ma i) /\
+mem_load_sz_sx s f W32 S32 S ma i = OPTION_MAP (\x.((V_i32 o i2w o w2i) ((bs2w x):word32))) (mem_load s f 32 ma i) /\
+mem_load_sz_sx s f W64 S8 S ma i = OPTION_MAP (\x.((V_i64 o i2w o w2i) ((bs2w x):word8))) (mem_load s f 8 ma i) /\
+mem_load_sz_sx s f W64 S16 S ma i = OPTION_MAP (\x.((V_i64 o i2w o w2i) ((bs2w x):word16))) (mem_load s f 16 ma i) /\
+mem_load_sz_sx s f W64 S32 S ma i = OPTION_MAP (\x.((V_i64 o i2w o w2i) ((bs2w x):word32))) (mem_load s f 32 ma i)
+`
+
+val mem_store_def = Define `mem_store s f n ma (V_i32 i) w = let (ptr, len) = mem_range i ma n in (write_mem s f ptr (w2bs w))`
+
+(* Variant of mem_store that will infer the correct length based on the type of the given value. *)
+val mem_store_t_def = Define `
+mem_store_t s f ma i (V_i32 v) = mem_store s f 32 ma i v /\
+mem_store_t s f ma i (V_i64 v) = mem_store s f 64 ma i v /\
+mem_store_t s f ma i (V_f32 v) = mem_store s f 32 ma i (float_to_fp32 v) /\
+mem_store_t s f ma i (V_f64 v) = mem_store s f 64 ma i (float_to_fp64 v)
+`
+
+(* Variant of mem_store that accounts for a storage size. *)
+val mem_store_sz_def = Define `
+mem_store_sz s f S8  ma i (V_i32 v) = mem_store s f  8 ma i (w2w v: ( 8 word)) /\
+mem_store_sz s f S16 ma i (V_i32 v) = mem_store s f 16 ma i (w2w v: (16 word)) /\
+mem_store_sz s f S32 ma i (V_i32 v) = mem_store s f 32 ma i (w2w v: (32 word)) /\
+mem_store_sz s f S8  ma i (V_i64 v) = mem_store s f  8 ma i (w2w v: ( 8 word)) /\
+mem_store_sz s f S16 ma i (V_i64 v) = mem_store s f 16 ma i (w2w v: (16 word)) /\
+mem_store_sz s f S32 ma i (V_i64 v) = mem_store s f 32 ma i (w2w v: (32 word))
 `
 
 (* Results are the same for both semantics. *)

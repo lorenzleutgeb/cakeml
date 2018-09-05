@@ -195,7 +195,7 @@ val (step_native_rules, step_native_cases, step_native_ind) = Hol_reln `
 (!vs es s f w sz sx ma.
     (s, f, (i :: vs, Plain (Loadi w sz sx ma) :: es))
   -n->
-    case mem_load_w_sx s f w sz sx ma i of
+    case mem_load_sz_sx s f w sz sx ma i of
       | NONE   => (s, f, (vs, es), SOME (Trap "Invalid load"))
       | SOME v => (s, f, (v :: vs, es), NONE)
 ) /\

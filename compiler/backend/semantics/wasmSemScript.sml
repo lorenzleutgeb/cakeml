@@ -217,23 +217,22 @@ val evaluate_small_def = tDefine "evaluate_small" `
             | SOME v => resulting s (v :: vs')
             | NONE   => (SOME (Trap "Bad load instruction"), s)
           )
-        | i :: vs', Loadi w tp sx ma =>
-          (case mem_load_w_sx s.store s.frame w tp sx ma i of
+        | i :: vs', Loadi w sz sx ma =>
+          (case mem_load_sz_sx s.store s.frame w sz sx ma i of
             | SOME v => resulting s (v :: vs')
             | NONE   => (SOME (Trap "Bad load instruction"), s)
           )
 
         (* 4.4.4.2 *)
-        (* TODO: Write a store function that avoids unbounded 'a word. *)
-        (* | i :: v :: vs', Store t ma => *)
-        (*   (case mem_store s.store s.frame (bit_width (typeof v)) ma i (val2w v) of *)
-        (*      | SOME s' => resulting (s with store := s') vs' *)
-        (*      | NONE => (SOME (Trap "Bad store instruction"), s)) *)
+        | i :: v :: vs', Store t ma =>
+          (case mem_store_t s.store s.frame ma i v of
+             | SOME s' => resulting (s with store := s') vs'
+             | NONE => (SOME (Trap "Bad store instruction"), s))
 
-        (* | i :: v :: vs', Storei w tp ma => *)
-        (*   (case mem_store s.store s.frame (bit_width_p tp) ma i (val2w v) of *)
-        (*      | SOME s' => resulting (s with store := s') vs' *)
-        (*      | NONE => (SOME (Trap "Bad store instruction"), s)) *)
+        | i :: v :: vs', Storei w sz ma =>
+          (case mem_store_sz s.store s.frame sz ma i v of
+             | SOME s' => resulting (s with store := s') vs'
+             | NONE => (SOME (Trap "Bad store instruction"), s))
 
         (* 4.4.4.3 *)
         | vs, Current_memory =>
