@@ -83,10 +83,10 @@ val _ = Datatype `width = W32 | W64`
 
 val _ = Datatype `valtype = Tv kind width`
 
-val _ = Define `T_i32 = Tv Ki W32`
-val _ = Define `T_i64 = Tv Ki W64`
-val _ = Define `T_f32 = Tv Kf W32`
-val _ = Define `T_f64 = Tv Kf W64`
+val _ = overload_on("T_i32", ``Tv Ki W32``)
+val _ = overload_on("T_i64", ``Tv Ki W64``)
+val _ = overload_on("T_f32", ``Tv Kf W32``)
+val _ = overload_on("T_f64", ``Tv Kf W64``)
 
 val _ = Define `flip_width W32 = W64 /\ flip_width W64 = W32`
 val _ = Define `flip_kind  Ki  = Kf  /\ flip_kind  Kf  = Ki`
