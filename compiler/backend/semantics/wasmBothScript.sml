@@ -22,8 +22,8 @@ val to_small_state_def = Define `
      |>`
 
 val to_small_state_rel = Q.store_thm("to_small_state_rel",
-  `(∀s. state_rel (to_small_state s) s)`,
-  rw[state_rel_def] >> rw[to_small_state_def]
+  `∀s. state_rel (to_small_state s) s`,
+  rw[state_rel_def, to_small_state_def]
 )
 
 val small_to_big = Q.store_thm("small_to_big",
