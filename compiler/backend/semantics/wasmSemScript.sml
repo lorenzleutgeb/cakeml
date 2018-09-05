@@ -36,10 +36,6 @@ val _ = Datatype `
      ; clock: num
      |>`
 
-(* TODO: There are multiple ad-hoc definitions of orderings floating around this file... *)
-
-val code_order = Define `code_order = inv_image ($<) (\c. ainstr2_size (SND c))`
-
 val expand_def = Define `
   expand s vs es =
     let c = (vs, es ++ (TL (SND s.code))) in
@@ -90,6 +86,11 @@ val match_ffi_args_def = Define `
       (SOME (((w2n ptr1, w2n len1), (w2n ptr2, w2n len2)), vs'))
     | _ =>
       NONE`
+
+val state_order_quot = `inv_image ($< LEX $<) (\s. (s.clock, ainstr2_size (SND s.code)))`
+val state_order_def = Define `state_order = inv_image ($< LEX $<) (\s. (s.clock, ainstr2_size (SND s.code)))`
+
+val size_and_lex = [wasmSemanticPrimitivesTheory.ainstr_size_def, pairTheory.LEX_DEF, state_order_def]
 
 (* NOTE: Traps are not bubbled up through reductions but returned directly! *)
 val evaluate_small_def = tDefine "evaluate_small" `
@@ -383,17 +384,17 @@ val evaluate_small_def = tDefine "evaluate_small" `
         evaluate_nomatch s
 `
 (
-  WF_REL_TAC `inv_image ($< LEX $<) (\s. (s.clock, ainstr2_size (SND s.code)))` >>
-  simp [wasmSemanticPrimitivesTheory.ainstr_size_def]
+  WF_REL_TAC state_order_quot >>
+  simp size_and_lex
 )
 
 val evaluate_small_progress = Q.store_thm("evaluate_small_progress",
-  `!s s'. evaluate_small s = (NONE, s') ==> inv_image ($< LEX $<) (\s. (s.clock, ainstr2_size (SND s.code))) s' s`,
+  `!s s'. evaluate_small s = (NONE, s') ==> state_order s' s`,
   ho_match_mp_tac (theorem "evaluate_small_ind") >> rpt gen_tac >> strip_tac >>
   Cases_on `s.code` >> rename [`s.code = (vs, es)`] >>
   Cases_on `es` >> ONCE_REWRITE_TAC [evaluate_small_def] >> simp [] >> rename [`s.code = (vs, e :: es)`] >>
   simp_tac (srw_ss () ++ boolSimps.COND_elim_ss) [AllCaseEqs (), PULL_EXISTS] >> rw [resulting_def,effect_def] >>
-  TRY (drule expand_dec) >> simp [wasmSemanticPrimitivesTheory.ainstr_size_def,pairTheory.LEX_DEF]
+  TRY (drule expand_dec) >> simp size_and_lex
 )
 
 val evaluate_wasm_def = tDefine "evaluate_wasm" `
@@ -404,7 +405,8 @@ val evaluate_wasm_def = tDefine "evaluate_wasm" `
       | NONE   , s' => evaluate_wasm s'
 `
 (
-  WF_REL_TAC `inv_image ($< LEX $<) (\s. (s.clock, ainstr2_size (SND s.code)))` >> rw [] >> drule evaluate_small_progress >> simp[wasmSemanticPrimitivesTheory.ainstr_size_def,pairTheory.LEX_DEF]
+  WF_REL_TAC state_order_quot >> rw []
+  >> drule evaluate_small_progress >> simp size_and_lex
 )
 
 (* val evaluate_fill_b = Q.store_thm("evaluate_fill_b", *)
