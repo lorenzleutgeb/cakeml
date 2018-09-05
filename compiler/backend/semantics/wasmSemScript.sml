@@ -228,12 +228,12 @@ val evaluate_small_def = tDefine "evaluate_small" `
              | NONE => (SOME (Trap "Bad store instruction"), s))
 
         (* 4.4.4.3 *)
-        | vs, Current_memory =>
+        | vs, MemorySize =>
           resulting s ((V_i32 (n2w (bytes_to_pages (LENGTH (get_mem s.store s.frame))))) :: vs)
 
         (* 4.4.4.4 *)
         (* NOTE: Growing memory always fails. That matches CakeML and makes it deterministic! *)
-        | n :: vs', Grow_memory =>
+        | n :: vs', MemoryGrow =>
           resulting s ((V_i32 (i2w ~1)) :: vs')
 
         (* 4.4.5  Control Instructions *)

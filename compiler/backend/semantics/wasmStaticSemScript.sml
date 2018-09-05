@@ -145,8 +145,8 @@ val (typ_rules, typ_cases, typ_ind) = Hol_reln `
 (! c t . (hasmem c /\ (align_ok ma (bit_width t))) ==> c |- [Store t ma] ::- consumes [T_i32; t]) /\
 (! c w tp ma. (hasmem c /\ (align_ok ma (bit_width_p tp))) ==> c |- [Storei w tp ma] ::- consumes [T_i32; Ti Ki w]) /\
 (* 3.3.4.5 - 3.3.4.6 *)
-(! c . hasmem c ==> c |- [Current_memory] ::- produces [T_i32]) /\
-(! c . hasmem c ==> c |- [Grow_memory] ::- endofunc [T_i32]) /\
+(! c . hasmem c ==> c |- [MemorySize] ::- produces [T_i32]) /\
+(! c . hasmem c ==> c |- [MemoryGrow] ::- endofunc [T_i32]) /\
 (* 3.3.5.1 - 3.3.5.2 *)
 (! c . c |- [Nop] ::- endofunc []) /\
 (! c t1s t2s . c |- [Unreachable] ::- t1s _> t2s) /\
