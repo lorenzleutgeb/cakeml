@@ -88,22 +88,22 @@ val (step_simple_rules, step_simple_cases, step_simple_ind) = Hol_reln `
 (!vs es c1 c2 op.
     (V_i32 c1 :: V_i32 c2 :: vs, Binop_i W32 op, es)
   -s->
-    (wrap_option (OPTION_MAP V_i32 (app_binop_i op c1 c2)) "Binary operation without result" vs es)
+    (wrap_option (OPTION_MAP V_i32 (app_binop_i op c1 c2)) "Undefined result for binary operation on i32" vs es)
 ) /\
 (!vs es c1 c2 op.
     (V_i64 c1 :: V_i64 c2 :: vs, Binop_i W64 op, es)
   -s->
-    (wrap_option (OPTION_MAP V_i64 (app_binop_i op c1 c2)) "Binary operation without result" vs es)
+    (wrap_option (OPTION_MAP V_i64 (app_binop_i op c1 c2)) "Undefined result for binary operation on i64" vs es)
 ) /\
 (!vs es c1 c2 op.
     (V_f32 c1 :: V_f32 c2 :: vs, Binop_f W32 op, es)
   -s->
-    (wrap_option (OPTION_MAP V_f32 (app_binop_f op c1 c2)) "Binary operation without result" vs es)
+    (wrap_option (OPTION_MAP V_f32 (app_binop_f op c1 c2)) "Undefined result for binary operation on f32" vs es)
 ) /\
 (!vs es c1 c2 op.
     (V_f64 c1 :: V_f64 c2 :: vs, Binop_f W64 op, es)
   -s->
-    (wrap_option (OPTION_MAP V_f64 (app_binop_f op c1 c2)) "Binary operation without result" vs es)
+    (wrap_option (OPTION_MAP V_f64 (app_binop_f op c1 c2)) "Undefined result for binary operation on f64" vs es)
 ) /\
 (* 4.4.1.4 *)
 (!vs es c op. (V_i32 c :: vs, Testop_i W32 op, es) -s-> (fine (wrap_bool (app_testop_i op c) :: vs) es)) /\
@@ -135,12 +135,18 @@ val (step_simple_rules, step_simple_cases, step_simple_ind) = Hol_reln `
 (!vs es. (v :: vs, Drop, es) -s-> (fine vs es)) /\
 (* 4.4.2.2 *)
 (!vs es a b i. (a :: b :: V_i32 i :: vs, Select, es) -s-> (fine ((if i = 0w then b else a) :: vs) es)) /\
+(* 4.4.3.{1,2} [moved-down] *)
 (* 4.4.3.3 *)
 (!vs es v x. (v :: vs, Tee_local x, es) -s-> (fine (v :: v :: vs) (Plain (Set_local x) :: es))) /\
+(* 4.4.3.{4,5} [moved-down] *)
+(* 4.4.4.{1,2,3} [moved-down] *)
+(* 4.4.4.4 (a) *)
+(!vs es. (V_i32 n :: vs, Grow_memory, es) -s-> (fine ((V_i32 (i2w ~1)) :: vs) es)) /\
+(* 4.4.4.4 (b) TODO *)
 (* 4.4.5.1 *)
 (!vs es. (vs, Nop, es) -s-> (fine vs es)) /\
 (* 4.4.5.2 *)
-(!vs es. (vs, Unreachable, es) -s-> (vs, es, SOME (Trap "Unreachable executed"))) /\
+(!vs es. (vs, Unreachable, es) -s-> (vs, es, SOME (Trap "Unreachable"))) /\
 (* 4.4.5.3 *)
 (!vs es t is. (vs, Block t is, es) -s-> (fine vs (Label (LENGTH t) [] ([], MAP Plain is) :: es))) /\
 (* 4.4.5.4 *)
@@ -149,6 +155,7 @@ val (step_simple_rules, step_simple_cases, step_simple_ind) = Hol_reln `
 (!t i1s i2s i.
   (V_i32 i :: vs, If t is1 is2, es) -s-> (fine vs (Plain (Block t (if i = 0w then i2s else i1s)) :: es))
 ) /\
+(* 4.4.5.6 [moved-down] *)
 (* 4.4.5.7 *)
 (!vs es b l.
   (V_i32 b :: vs, Br_if l, es) -s-> (fine vs ((if b = 0w then [] else [Plain (Br l)]) ++ es))
@@ -159,6 +166,8 @@ val (step_simple_rules, step_simple_cases, step_simple_ind) = Hol_reln `
   -s->
     (fine vs (Plain (Br (if i < LENGTH (to_list ls) then EL i (to_list ls) else ln)) :: es))
 )
+(* 4.4.5.{9,10,11} [moved-down] *)
+(* 4.4.6 [moved-down] *)
 `
 
 (* Now, the steps that involve store and/or frame. *)
@@ -169,11 +178,24 @@ val _ = set_mapped_fixity {
 }
 val (step_native_rules, step_native_cases, step_native_ind) = Hol_reln `
 (* 4.2.13.3 *)
-(* (!s f' f'' n. (s, f', is) -n-> (s', f'', is', r) ==> (s, f, [Frame n f' is]) -n-> (s', f, [Frame n f'' is'], r)) /\ *)
+(!s f f' f'' n c c' r vs es.
+    (s, f', c) -n-> (s', f'', c', r)
+  ==>
+    (s, f, (vs, Frame n f' c :: es)) -n-> (s', f, (vs, Frame n f'' c' :: es), r)
+) /\
+(!s f f' n c c' r vs es.
+    (s, f, c) -n-> (s', f', c', r)
+  ==>
+    (s, f, (vs, Label n is c :: es)) -n-> (s', f', (vs, Label n is c' :: es), r)
+) /\
 (* 4.4.3.1 *)
 (!vs es s f x. (s, f, (vs, Plain (Get_local (n2w x)) :: es)) -n-> (s, f, (EL x f.locals :: vs, es), NONE)) /\
 (* 4.4.3.2 *)
-(!vs es s f x v. (s, f, (v :: vs, Plain (Set_local (n2w x)) :: es)) -n-> (s, (f with locals := LUPDATE v x f.locals), (vs, es), NONE)) /\
+(!vs es s f x v.
+    (s, f, (v :: vs, Plain (Set_local (n2w x)) :: es))
+  -n->
+    (s, (f with locals := LUPDATE v x f.locals), (vs, es), NONE)
+) /\
 (* 4.4.3.4 *)
 (!vs es s f x. (s, f, (vs, Plain (Get_global (n2w x)) :: es)) -n-> (s, f, ((EL (EL x f.module.globaladdrs) s.globals).value :: vs, es), NONE)) /\
 (* 4.4.3.5 *)
@@ -199,30 +221,35 @@ val (step_native_rules, step_native_cases, step_native_ind) = Hol_reln `
       | NONE   => (s, f, (vs, es), SOME (Trap "Invalid load"))
       | SOME v => (s, f, (v :: vs, es), NONE)
 ) /\
-(* 4.4.4.2 *)
-(* TODO *)
-(* (!s f t v a w ma bs. (c = (s, f, [Const (V_i32 i); Const v; Store t NONE ma]) /\ a = HD f.module.memaddrs /\ t = typeof v /\ w = mem_write (EL a s.mems) i ma (bit_width t) v) ==> *)
-(*     (w = NONE    ==> c -n-> (s, f, [Trap])) /\ *)
-(*     (w = SOME bs ==> c -n-> (s with mems := LUPDATE a (m with data := bs) s.mems), f, []) *)
-(* ) /\ *)
-(* 4.4.4.3 *)
+(!vs es s f v i t ma.
+     (s, f, (v :: i :: vs, Plain (wasmLang$Store t ma) :: es))
+ -n->
+ case mem_store_t s f ma i v of
+   | NONE   => (s, f, (vs, es), SOME (Trap "Invalid store"))
+   | SOME s' => (s', f, (vs, es), NONE)
+) /\
+(* Second case, for Store with storage size and sign extension. *)
+(!vs es s f v i w sz ma.
+     (s, f, (v :: i :: vs, Plain (Storei w sz ma) :: es))
+ -n->
+ case mem_store_sz s f sz ma i v of
+   | NONE    => (s, f, (vs, es), SOME (Trap "Invalid store"))
+   | SOME s' => (s', f, (vs, es), NONE)
+) /\
+(* (* 4.4.4.3 *) *)
 (!vs es s f. (s, f, (vs, Plain Current_memory :: es)) -n-> (s, f, ((V_i32 (n2w (bytes_to_pages (LENGTH (EL (HD f.module.memaddrs) s.mems).data)))) :: vs, es), NONE)) /\
 (* 4.4.5.6 *)
-(* NON PLAIN *)
-(* (!vs es is l holed vs'. *)
-(*     (vs, Label (LENGTH vs) is (fill_b l holed (vs', [Plain (Br (n2w l))])), es) *)
-(*   -s-> *)
-(*     (fine (vs' :: vs) ((MAP Plain is) ++ es)) *)
-(* ) /\ *)
+(!vs es s f is l holed vs'.
+    (s, f, (vs, Label (LENGTH vs') is (fill_b l holed (vs', [Plain (Br (n2w l))])) :: es))
+  -n->
+    (s, f, ((vs' ++ vs), ((MAP Plain is) ++ es)), NONE)
+) /\
 (* 4.4.5.9 *)
-(!s f vs k.
+(!vs es s f vs' b k.
     (s, f, (vs, Frame (LENGTH vs') f (fill_b b k (vs', [Plain Return])) :: es))
   -n->
     (s, f, (vs' ++ vs, es), NONE)
 ) /\
-(* 4.4.6.2 *)
-(* NON PLAIN *)
-(* (!vs es n is vs'. (vs, Label n is (vs', []), es) -s-> (fine (vs' ++ vs) es)) *)
 (* 4.4.5.10 *)
 (!vs es s f x. (s, f, (vs, Plain (Call (n2w x)) :: es)) -n-> (s, f, (vs, Invoke (EL x f.module.funcaddrs) :: es), NONE)) /\
 (* 4.4.5.11 *)
@@ -233,6 +260,8 @@ val (step_native_rules, step_native_cases, step_native_ind) = Hol_reln `
     then (s, f, (vs, Invoke a :: es), NONE)
     else (s, f, (vs, es), SOME (Trap "Invalid Call_indirect"))
 ) /\
+(* 4.4.6.2 *)
+(!vs es s f n is vs'. (s, f, (vs, Label n is (vs', []) :: es)) -n-> (s, f, (vs' ++ vs, es), NONE)) /\
 (* 4.4.7.1 *)
 (!s f a t1s t2s m mod code. (has s.funcs a (Native (t1s _> t2s) mod code)) /\ ts = code.locals /\ Expr is = code.body /\ m = LENGTH t2s /\ n = LENGTH t1s ==>
     (s, f, (vs, Invoke a :: es))
@@ -257,8 +286,24 @@ val (step_rules, step_cases, step_ind) = Hol_reln `
 (* lift -s-> *)
 (!vs es s i vs' es' r. ((s.code = (vs, Plain i :: es)) /\ (s.result = NONE /\ (vs, i, es) -s-> (vs', es', r))) ==> s ---> (s with <| code := (vs', es'); result := r |>)) /\
 (* lift -n-> *)
-(!s s' f' c' r. (s.result = NONE /\ (s.store, s.frame, s.code) -n-> (s', f', c', r)) ==> s ---> (s with <| store := s'; frame := f'; code := (vs, es); result := r |>))
+(!s s' f' c' r. (s.result = NONE /\ (s.store, s.frame, s.code) -n-> (s', f', c', r)) ==> s ---> (s with <| store := s'; frame := f'; code := (vs, es); result := r |>)) /\
 (* 4.4.7.3 *)
+(!s ptr1 len1 ptr2 len2 vs es a.
+    s.code = (V_i32 (n2w len2) :: V_i32 (n2w ptr2) :: V_i32 (n2w len1) :: V_i32 (n2w ptr1) :: vs, Invoke a :: es) /\
+    has s.store.funcs a (Host (ForeignFunction name))
+  ==>
+    s --->
+    let rbs = read_mem s.store s.frame in
+      case (rbs ptr1 len1, rbs ptr2 len2) of
+        | SOME b1s, SOME b2s => (case call_FFI s.ffi name b1s b2s of
+          | FFI_final outcome => (s with result := SOME (FinalFFI outcome))
+          | FFI_return new_ffi new_bytes => (case write_mem s.store s.frame ptr1 new_bytes of
+            | SOME s' => (s with <| ffi := new_ffi; store := s'; code := (vs, es) |>)
+            | NONE    => (s with <| result := SOME (Trap "Host function wants to write out of bounds") |>)
+          )
+        )
+        | _ => (s with <| result := SOME (Trap "Host function arguments out of bounds") |>)
+)
 `
 
 (* val _ = set_mapped_fixity { *)
@@ -281,6 +326,8 @@ val _ = set_mapped_fixity {
   tok       = "↪*",
   term_name = "step_closure"
 }
-val (step_closure_rules, step_closure_cases, step_closure_ind) = Hol_reln `(!a. a --->* a) /\ (!a b c. (a ---> b /\ b ---> c) ==> (a --->* c))`
+val (step_closure_rules, step_closure_cases, step_closure_ind) = Hol_reln `
+  (!a. a --->* a) /\ (!a b c. (a ---> b /\ b ---> c) ==> (a --->* c))
+`
 
 val _ = export_theory ()

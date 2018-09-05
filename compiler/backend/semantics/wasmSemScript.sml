@@ -187,7 +187,6 @@ val evaluate_small_def = tDefine "evaluate_small" `
 
         (* 4.4.3.3 *)
         | c :: vs', Tee_local x =>
-          (* Stack length remains unchanged, result length increases. *)
           effect s (c :: c :: vs') (Plain (Set_local x))
 
         (* 4.4.3.4 *)
@@ -255,12 +254,10 @@ val evaluate_small_def = tDefine "evaluate_small" `
 
         (* 4.4.5.3 *)
         | vs, Block ts es' =>
-          (* Same stack and result length, block is swapped for label. *)
           effect s vs (Label (LENGTH ts) [] ([], (MAP Plain es')))
 
         (* 4.4.5.4 *)
         | vs, Loop ts es' =>
-          (* Same stack and result length, loop is swapped for label. *)
           effect s vs (Label 0 [pe] ([], (MAP Plain es')))
 
         (* 4.4.5.5 *)
@@ -327,6 +324,7 @@ val evaluate_small_def = tDefine "evaluate_small" `
       | vs, Label n is (vs', []) =>
         resulting s (vs' ++ vs)
 
+      (* 4.2.13.3 *)
       (* Recursion to evaluate what's inside a frame. *)
       | vs, Frame n f c =>
         (case evaluate_small (s with <| code := c; frame := f |>) of
@@ -408,15 +406,19 @@ val evaluate_wasm_def = tDefine "evaluate_wasm" `
   >> drule evaluate_small_progress >> simp size_and_lex
 )
 
-(* val evaluate_fill_b = Q.store_thm("evaluate_fill_b", *)
-(*   `(s.code = ([], Label (LENGTH vs) is (fill_b l holed (vs, [Plain (Br (n2w l))])))) ==> ((SOME vs, s') = evaluate_wasm s)`, *)
-(*   cheat *)
-(* ) *)
+val evaluate_fill_b = Q.store_thm("evaluate_fill_b",
+  `  s.code = ([], [Label (LENGTH vs) is (fill_b l b (vs, [Plain (Br (n2w l))]))]) /\ LENGTH vs < 2
+   ==>
+     evaluate_wasm s = (r, s') /\ r = wrap_result vs`,
+  cheat
+)
 
-(* val evaluate_fill_e = Q.store_thm("evaluate_fill_e", *)
-(*   `(s.code = ([], Frame (LENGTH vs) f (fill_e holed (vs, [Plain Return])))) ==> ((SOME vs, s') = evaluate_wasm s)`, *)
-(*   cheat *)
-(* ) *)
+val evaluate_fill_e = Q.store_thm("evaluate_fill_e",
+  `  s.code = ([], [Frame (LENGTH vs) f (fill_b b k (vs, [Plain Return]))]) /\ LENGTH vs < 2
+   ==>
+     evaluate_wasm s = (r, s') /\ r = wrap_result vs`,
+  cheat
+)
 
 (* TODO: Do we need something like evaluate_expression? *)
 
