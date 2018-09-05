@@ -141,7 +141,7 @@ val (step_simple_rules, step_simple_cases, step_simple_ind) = Hol_reln `
 (* 4.4.3.{4,5} [moved-down] *)
 (* 4.4.4.{1,2,3} [moved-down] *)
 (* 4.4.4.4 (a) *)
-(!vs es. (V_i32 n :: vs, Grow_memory, es) -s-> (fine ((V_i32 (i2w ~1)) :: vs) es)) /\
+(!vs es. (V_i32 n :: vs, MemoryGrow, es) -s-> (fine ((V_i32 (i2w ~1)) :: vs) es)) /\
 (* 4.4.4.4 (b) TODO *)
 (* 4.4.5.1 *)
 (!vs es. (vs, Nop, es) -s-> (fine vs es)) /\
@@ -238,7 +238,7 @@ val (step_native_rules, step_native_cases, step_native_ind) = Hol_reln `
    | SOME s' => (s', f, (vs, es), NONE)
 ) /\
 (* (* 4.4.4.3 *) *)
-(!vs es s f. (s, f, (vs, Plain Current_memory :: es)) -n-> (s, f, ((V_i32 (n2w (bytes_to_pages (LENGTH (EL (HD f.module.memaddrs) s.mems).data)))) :: vs, es), NONE)) /\
+(!vs es s f. (s, f, (vs, Plain MemorySize :: es)) -n-> (s, f, ((V_i32 (n2w (bytes_to_pages (LENGTH (EL (HD f.module.memaddrs) s.mems).data)))) :: vs, es), NONE)) /\
 (* 4.4.5.6 *)
 (!vs es s f is l holed vs'.
     (s, f, (vs, Label (LENGTH vs') is (fill_b l holed (vs', [Plain (Br (n2w l))])) :: es))

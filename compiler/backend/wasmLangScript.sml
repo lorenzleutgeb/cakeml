@@ -250,8 +250,8 @@ val _ = Datatype `
     (* Loadi and Storei are only applicable to integers and use reduced width through tp. *)
     | Loadi  width   sz sx memarg
     | Storei width   sz    memarg
-    | Current_memory
-    | Grow_memory
+    | MemorySize
+    | MemoryGrow
 (* 2.4.5  Control Instructions *)
     | Unreachable
     | Nop
