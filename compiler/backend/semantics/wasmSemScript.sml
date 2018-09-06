@@ -49,11 +49,19 @@ val expand_def = Define `
 (* Showing that expand ensures some lexicographic order helps for
  * termination proof of wasm_evaluate below. *)
 val expand_dec = Q.store_thm("expand_dec[simp]",
-  `expand s vs es = (NONE, s') ==> (($< LEX $<) (s'.clock, ainstr2_size (SND s'.code)) (s.clock, ainstr2_size (SND s.code)))`,
+ `expand s vs es = (NONE, s') ==> (($< LEX $<) (s'.clock, ainstr2_size (SND s'.code)) (s.clock, ainstr2_size (SND s.code)))`,
   rw[expand_def] >> simp [expand_def,LEX_DEF] >> rw [expand_def] >> simp [expand_def,LEX_DEF]
 )
 
+val expand_eq_none = Q.store_thm("expand_eq_none[simp]",
+  `  s.code = (vs, es) /\ (s.clock > 0 \/ ainstr2_size (es' ++ (TL es)) < ainstr2_size es)
+   ==>
+     (?s'. (expand s vs' es' = (NONE, s') /\ s'.code = (vs', es' ++ (TL es))))`,
+  rw [expand_def]
+)
+
 val effect_def = Define `effect s vs e = expand s vs [e]`
+
 val resulting_def = Define `resulting s vs' = expand s vs' []`
 
 val typ_assert_def = Define `
@@ -401,17 +409,60 @@ val evaluate_wasm_def = tDefine "evaluate_wasm" `
 )
 
 val evaluate_fill_b = Q.store_thm("evaluate_fill_b",
-  `  s.code = ([], [Label (LENGTH vs) is (fill_b l b (vs, [Plain (Br (n2w l))]))]) /\ LENGTH vs < 2
-   ==>
-     evaluate_wasm s = (r, s') /\ r = wrap_result vs`,
-  cheat
+  `(!s vs is b.
+      s.code = ([], [Label (LENGTH vs) [] (fill_b b (vs, [Plain (Br (n2w (b_depth b)))]))]) /\ LENGTH vs < 2 /\ s.clock > 0
+    ==>
+      (?s'. evaluate_wasm s = (wrap_result vs, s'))
+   )`,
+  rw [wasmSemanticPrimitivesTheory.wrap_result_def] >> imp_res_tac wasmSemanticPrimitivesTheory.wrap_result_eq_result >>
+
+  Induct_on `b`
+  >- (
+    rpt gen_tac >> strip_tac >>
+    fs [wasmSemanticPrimitivesTheory.fill_b_def,wasmSemanticPrimitivesTheory.b_depth_def] >>
+    rename [`push_code p`] >> Cases_on `p` >>
+    fs [wasmSemanticPrimitivesTheory.push_code_def] >>
+    ONCE_REWRITE_TAC [evaluate_wasm_def] >>
+    ONCE_REWRITE_TAC [evaluate_small_def] >>
+    ONCE_REWRITE_TAC [evaluate_small_def] >>
+    simp [effect_def,expand_def,wasmSemanticPrimitivesTheory.ainstr_size_def,listTheory.list_size_def,wasmLangTheory.instr_size_def] >>
+    ONCE_REWRITE_TAC [evaluate_wasm_def] >>
+    ONCE_REWRITE_TAC [evaluate_small_def] >>
+    ONCE_REWRITE_TAC [evaluate_small_def] >> simp [] >>
+    rw [expand_def,wasmSemanticPrimitivesTheory.ainstr_size_def,listTheory.list_size_def,wasmLangTheory.instr_size_def] >>
+    ONCE_REWRITE_TAC [evaluate_wasm_def] >> simp [] >>
+    (rw [listTheory.TAKE_APPEND1])
+  )
+  >- (
+      rpt gen_tac >> strip_tac >> cheat
+  )
 )
 
 val evaluate_fill_e = Q.store_thm("evaluate_fill_e",
-  `  s.code = ([], [Frame (LENGTH vs) f (fill_b b k (vs, [Plain Return]))]) /\ LENGTH vs < 2
+  `  s.code = ([], [Frame (LENGTH vs) f (fill_b b (vs, [Plain Return]))]) /\ LENGTH vs < 2 /\ s.clock > 0
    ==>
-     evaluate_wasm s = (r, s') /\ r = wrap_result vs`,
-  cheat
+     ? s'. evaluate_wasm s = (wrap_result vs, s')`,
+  rw [wasmSemanticPrimitivesTheory.wrap_result_def] >> imp_res_tac wasmSemanticPrimitivesTheory.wrap_result_eq_result >>
+  Induct_on `b`
+  >- (
+    rpt gen_tac >> strip_tac >>
+    fs [wasmSemanticPrimitivesTheory.fill_b_def,wasmSemanticPrimitivesTheory.b_depth_def] >>
+    rename [`push_code p`] >> Cases_on `p` >>
+    fs [wasmSemanticPrimitivesTheory.push_code_def] >>
+    ONCE_REWRITE_TAC [evaluate_wasm_def] >>
+    ONCE_REWRITE_TAC [evaluate_small_def] >>
+    ONCE_REWRITE_TAC [evaluate_small_def] >>
+    simp [effect_def,expand_def,wasmSemanticPrimitivesTheory.ainstr_size_def,listTheory.list_size_def,wasmLangTheory.instr_size_def] >>
+    ONCE_REWRITE_TAC [evaluate_wasm_def] >>
+    ONCE_REWRITE_TAC [evaluate_small_def] >>
+    ONCE_REWRITE_TAC [evaluate_small_def] >> simp [] >>
+    rw [expand_def,wasmSemanticPrimitivesTheory.ainstr_size_def,listTheory.list_size_def,wasmLangTheory.instr_size_def] >>
+    ONCE_REWRITE_TAC [evaluate_wasm_def] >> simp [] >>
+    (rw [listTheory.TAKE_APPEND1])
+  )
+  >- (
+    rpt gen_tac >> strip_tac >> cheat
+  )
 )
 
 (* TODO: Do we need something like evaluate_expression? *)
