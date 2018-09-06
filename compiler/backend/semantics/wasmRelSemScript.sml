@@ -240,14 +240,14 @@ val (step_native_rules, step_native_cases, step_native_ind) = Hol_reln `
 (* (* 4.4.4.3 *) *)
 (!vs es s f. (s, f, (vs, Plain MemorySize :: es)) -n-> (s, f, ((V_i32 (n2w (bytes_to_pages (LENGTH (EL (HD f.module.memaddrs) s.mems).data)))) :: vs, es), NONE)) /\
 (* 4.4.5.6 *)
-(!vs es s f is l holed vs'.
-    (s, f, (vs, Label (LENGTH vs') is (fill_b l holed (vs', [Plain (Br (n2w l))])) :: es))
+(!vs es s f is holed vs'.
+    (s, f, (vs, Label (LENGTH vs') is (fill_b holed (vs', [Plain (Br (n2w (b_depth holed)))])) :: es))
   -n->
     (s, f, ((vs' ++ vs), ((MAP Plain is) ++ es)), NONE)
 ) /\
 (* 4.4.5.9 *)
-(!vs es s f vs' b k.
-    (s, f, (vs, Frame (LENGTH vs') f (fill_b b k (vs', [Plain Return])) :: es))
+(!vs es s f vs' b.
+    (s, f, (vs, Frame (LENGTH vs') f (fill_b b (vs', [Plain Return])) :: es))
   -n->
     (s, f, (vs' ++ vs, es), NONE)
 ) /\

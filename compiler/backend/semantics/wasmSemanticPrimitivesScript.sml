@@ -146,8 +146,12 @@ val _ = Datatype `
     | Bk (val list) num (instr list) block (ainstr list)`
 
 val fill_b_def = Define `
-fill_b 0n (B0 c)              filler = push_code c filler /\
-fill_b k  (Bk vs n i1s b i2s) filler = (vs, ([Label n i1s (fill_b (k - 1n) b filler)] ++ i2s))`
+fill_b (B0 c)              filler = push_code c filler /\
+fill_b (Bk vs n i1s b i2s) filler = (vs, ([Label n i1s (fill_b b filler)] ++ i2s))`
+
+val b_depth_def = Define `
+b_depth (B0 c) = 0n /\
+b_depth (Bk vs n i1s b i2s) = (b_depth b) + 1n`
 
 (* 4.2.13.2  Configurations *)
 val _ = Datatype `thread = Thread frame code`
