@@ -1,4 +1,11 @@
-open preamble stackLangTheory wasmLangTheory;
+open preamble stackLangTheory wasmLangTheory
+
+(* NOTE: wasm behaves differently compared to the alternative
+ *       branch (stack->lab->target) in that it will encode
+ *       to bytes directly. The exporter then does "nothing".
+ *       This is to keep compatiblity. *)
+open wasm_binaryTheory
+
 local open stack_allocTheory stack_removeTheory stack_namesTheory
            word_to_stackTheory bvl_to_bviTheory in end
 
@@ -59,13 +66,13 @@ val foldl_prog_def = Define `
 
       | p => f p e`
 
-(* Extracts the names of all foreign functions that p might call. *)
-val ffi_names_def = Define `
-  ffi_names prog = foldl_prog (\p acc.
+(* Extracts the names of all foreign functions that instr might call. *)
+val extract_ffi_names_def = Define `
+  extract_ffi_names = foldl_prog (\p acc.
     case p of
       | FFI name _ _ _ _ _ => name :: acc
       | _                  =>         acc
-  ) [] prog`
+  ) []`
 
 (* TODO: Implement this ... *)
 val reg_to_global_def = Define `reg_to_global n = n2w n`
@@ -332,11 +339,13 @@ val compile_section_def = Define compile_section_quotation
 (*   >> rw[Once compile_def,pairTheory.ELIM_UNCURRY] >> every_case_tac >> fs[]); *)
 end
 
-val prog_to_block_def = Define `
-  prog_to_block (n, p) =
+val segment_to_block_def = Define `
+  segment_to_block (n, p) =
     let (lines, _, m) = (compile_section p n (next_lab p 1)) in
       switch (get_lab) (splitall (\x. x = (Block [] [])) (lab ++ lines))
 `
+
+val build_body_def = Define `build_body (bs: ((wasmLang$instr list) list)) = [Block [] []]`
 
 val _ = Datatype `
   config =
@@ -344,12 +353,55 @@ val _ = Datatype `
     ; jump : bool (* whether to compile to JumpLower or If Lower ... in stack_remove*)
     |>`
 
-val compile_def = Define `
- compile stack_conf data_conf max_heap sp offset prog =
+(* CakeML measures in mebibytes (=1MiB), WebAssembly measures in pages (=64KiB) *)
+(* (1024 * 1024) / (64 * 1024) = 16 *)
+val mebibytes_to_pages = Define `mebibytes_to_pages = $* 16n`
+
+val create_memory_def = Define `
+  create_memory heap_sz stack_sz = (* TODO: Maybe we need space for other stuff? *)
+    let size = n2w_itself (mebibytes_to_pages (heap_sz + stack_sz), (:32)) in
+    <| type := <| min := size; max := SOME size |> |>`
+
+val str2bs_def = Define `str2bs = MAP (\c. n2w_itself (ORD c, (:8)))`
+
+val main_type_def = Define `main_type = Tf [] []`
+val ffi_type_def = Define `ffi_type = Tf [T_i32; T_i32; T_i32; T_i32] []`
+
+(* TODO: A function that generates a list of globals that respects our configs. *)
+
+val ffi_names_to_imports_def = Define `
+  ffi_names_to_imports ffi_type_index =
+    MAP (\x. <| module := str2bs "ffi"; name := str2bs x; desc := Import_func ffi_type_index |>)`
+
+val wrap_block_def = Define `
+  wrap_block b ffi_names heap_size stack_size =
+    <| types  := [main_type; ffi_type]
+     ; funcs  := [<| type := 0w; locals := []; body := Expr b |>]
+     ; tables := [] (* We are not using a function table. *)
+     ; mems   := [(create_memory heap_size stack_size)]
+     ; globals:= [] (* TODO: Registers and all that. *)
+     ; elem   := [] (* We put no functions in the table. We don't even have a table.*)
+     ; data   := [] (* TODO: Is this true, no data? *)
+     ; start  := (SOME <| func := 0w |>)
+     ; imports:= (ffi_names_to_imports 1w ffi_names)
+     ; exports:= [<| name := str2bs "memory"; desc := Export_mem 0w |>;
+                  <| name := str2bs "main"  ; desc := Export_func 0w|>]
+     |>`
+
+val compile_without_encoding_def = Define `
+ compile_without_encoding stack_conf data_conf max_heap sp offset prog =
    let prog = stack_alloc$compile data_conf prog in
    let prog = stack_remove$compile stack_conf.jump offset T
                 max_heap sp InitGlobals_location prog in
    let prog = stack_names$compile stack_conf.reg_names prog in
-     MAP prog_to_block prog`;
+   let ffis = FLAT (MAP extract_ffi_names (MAP SND prog)) in
+   let seg_blocks = MAP segment_to_block prog in
+   let body = build_body seg_blocks in
+       wrap_block body ffis 1000n 1000n`;
+
+val compile_def = Define `
+  compile stack_conf data_conf max_heap sp offset prog =
+    let module = compile_without_encoding stack_conf data_conf max_heap sp offset prog in
+      enc_module module`
 
 val _ = export_theory()

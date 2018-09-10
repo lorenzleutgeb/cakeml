@@ -144,6 +144,8 @@ val _ = set_mapped_fixity {tok = "⟿", fixity = Infixr 700, term_name = "Tf"}
 val _ = Datatype `limits = <| min: u32; max: u32 option |>`
 
 (* 2.3.5  Memory Types *)
+(* NOTE: min and max are given in units of page size. According to section 4.2.8
+ * one page size is defined as 64KiB = 65536B. *)
 val _ = type_abbrev("memtype", ``:limits``)
 
 (* 2.3.6  Table Types *)
