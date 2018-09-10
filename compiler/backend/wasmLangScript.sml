@@ -69,9 +69,7 @@ val _ = type_abbrev("s64", ``:64 word``)
 val _ = type_abbrev("i64", ``:u64``)
 
 (* 2.2.4  Names *)
-(* TODO: Find a better representation for codepoints. *)
-val _ = type_abbrev("codepoint", ``:num``)
-val _ = type_abbrev("name", ``:(codepoint list)``)
+val _ = type_abbrev("name", ``:(byte list)``)
 
 (* 2.3.1  Value Types *)
 (* The spec defines {i,f}{32,64} as atomic types. We separate along "kind"
