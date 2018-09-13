@@ -77,7 +77,7 @@ fun read_block_comment start_comment end_comment filename = let
                    | SOME line => line);
     val _ = String.isPrefix start_comment hd_line orelse comm_fail ()
     val _ = every_char (not o Char.isAlphaNum) hd_line orelse
-              fail "first line must not contain alpha numberic chars"
+              fail "first line must not contain alpha numeric chars"
     val _ = not (String.isSubstring end_comment hd_line) orelse
               fail ("first line must not contain " ^ end_comment)
     (* read first line of comment content *)

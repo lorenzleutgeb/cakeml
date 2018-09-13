@@ -16,6 +16,7 @@ open Parse
 
 in
 
+(* TODO: Add wasm related definitions. *)
 val add_backend_compset = computeLib.extend_compset
   [computeLib.Tys
     [ (* ---- configurations ---- *)
@@ -26,7 +27,8 @@ val add_backend_compset = computeLib.extend_compset
     ,``:word_to_word$config``
     ,``:'a word_to_stack$config``
     ,``:stack_to_lab$config``
-    ,``:'a lab_to_target$config``
+    ,``:lab_to_target$config``
+    ,``:stack_to_wasm$config``
     ,``:'a asm_config``
     ,``:'a backend$config``
     ]

@@ -107,6 +107,12 @@ typeof v = case v of
              | V_f32 _ => T_f32
              | V_f64 _ => T_f64`
 
+val zero_def = Define `
+zero (Tv Ki W32) = V_i32 0w /\
+zero (Tv Ki W64) = V_i64 0w /\
+zero (Tv Kf W32) = V_f32 (fp32_to_float 0w) /\
+zero (Tv Kf W64) = V_f64 (fp64_to_float 0w)`
+
 val val2w_def = Define `
   val2w v = case v of
     | V_i32 w => w2w w
@@ -146,6 +152,7 @@ val _ = Datatype `limits = <| min: u32; max: u32 option |>`
 (* 2.3.5  Memory Types *)
 (* NOTE: min and max are given in units of page size. According to section 4.2.8
  * one page size is defined as 64KiB = 65536B. *)
+val _ = overload_on("page_size", ``65536n``)
 val _ = type_abbrev("memtype", ``:limits``)
 
 (* 2.3.6  Table Types *)
@@ -311,6 +318,8 @@ val _ = Datatype `mem = <| type: memtype |>`
 
 (* 2.5.6  Globals *)
 val _ = Datatype `global = <| type: globaltype; init: expr |>`
+
+val global_zero_def = Define `global_zero mut t = <| type := T_global mut t; init := Expr [Const (zero t)] |>`
 
 (* 2.5.7  Element Segments *)
 val _ = Datatype `elem = <| table: tableidx; offset: expr; init: funcidx vec |>`
