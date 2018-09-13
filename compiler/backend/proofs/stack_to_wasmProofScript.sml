@@ -42,25 +42,29 @@ val state_rel_def = Define `
     t.link_reg ≠ t.len_reg ∧ t.link_reg ≠ t.ptr_reg ∧
     t.link_reg ≠ t.len2_reg ∧ t.link_reg ≠ t.ptr2_reg ∧
     ~(t.link_reg ∈ s.ffi_save_regs) /\
-    (!k n. k ∈ s.ffi_save_regs ==> t.io_regs n k = NONE) /\
+    (* TODO: t has no io_regs *)
+    (* (!k n. k ∈ s.ffi_save_regs ==> t.io_regs n k = NONE) /\ *)
     (* might need to be cc_save_regs *)
-    (!k n. k ∈ s.ffi_save_regs ==> t.cc_regs n k = NONE) /\
+    (* TODO: t has no cc_regs *)
+    (* (!k n. k ∈ s.ffi_save_regs ==> t.cc_regs n k = NONE) /\ *)
     (∀x. x ∈ s.mdomain ⇒ w2n x MOD (dimindex (:'a) DIV 8) = 0) ∧
-    s.code_buffer = t.code_buffer ∧
-    s.compile = (λc p. t.compile c (MAP prog_to_section p)) ∧
-    (t.compile_oracle = λn. let (c,p,_)  = s.compile_oracle n in
-                           (c,MAP prog_to_section p)) ∧
-    (∀k. let (c,ps,_) = s.compile_oracle k in
-      EVERY (λ(n,p).
-        call_args p t.ptr_reg t.len_reg t.ptr2_reg t.len2_reg t.link_reg ∧
-        EVERY (λ(l1,l2).l1 = n ∧ l2 ≠ 0) (extract_labels p) ∧
-        ALL_DISTINCT (extract_labels p)) ps ∧
-        (* This last conjunct might not be necessary *)
-        ALL_DISTINCT (MAP FST ps) ) ∧
+    (* TODO: t has no code_buffer *)
+    (* os.code_buffer = t.code_buffer ∧ *)
+    (* TODO: t has no compile, compile_oracle *)
+    (* s.compile = (λc p. t.compile c (MAP prog_to_section p)) ∧ *)
+    (* (t.compile_oracle = λn. let (c,p,_)  = s.compile_oracle n in *)
+    (*                        (c,MAP prog_to_section p)) ∧ *)
+    (* TODO: t has no len_reg etc. *)
+    (* (∀k. let (c,ps,_) = s.compile_oracle k in *)
+    (*   EVERY (λ(n,p). *)
+    (*     call_args p t.ptr_reg t.len_reg t.ptr2_reg t.len2_reg t.link_reg ∧ *)
+    (*     EVERY (λ(l1,l2).l1 = n ∧ l2 ≠ 0) (extract_labels p) ∧ *)
+    (*     ALL_DISTINCT (extract_labels p)) ps ∧ *)
+    (*     (* This last conjunct might not be necessary *) *)
+    (*     ALL_DISTINCT (MAP FST ps) ) ∧ *)
     ¬s.use_stack ∧
     ¬s.use_store ∧
     ¬s.use_alloc ∧
     ¬s.be (* wasm spec is little endian *)`;
-`
 
 val _ = export_theory();
