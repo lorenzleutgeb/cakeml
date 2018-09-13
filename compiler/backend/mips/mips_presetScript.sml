@@ -1,4 +1,5 @@
 open preamble backendTheory mips_targetTheory mips_targetLib
+open stack_to_labTheory
 
 val _ = new_theory"mips_preset";
 
@@ -35,7 +36,7 @@ val bvl_conf = rconc (EVAL``bvl_to_bvi$default_config``)
 val word_to_word_conf = ``<| reg_alg:=2; col_oracle := λn. NONE |>``
 val mips_data_conf = ``<| tag_bits:=4; len_bits:=4; pad_bits:=2; len_size:=32; has_div:=T; has_longdiv:=F; has_fp_ops:=T; call_empty_ffi:=F; gc_kind:=Simple|>``
 val mips_word_conf = ``<| bitmaps := []:64 word list |>``
-val mips_stack_conf = ``<|jump:=F;reg_names:=mips_names|>``
+val mips_stack_conf = ``((<|jump:=F;reg_names:=mips_names|>):stack_to_lab$config)``
 val mips_lab_conf = ``<|pos:=0;ffi_names:=NONE;labels:=LN;init_clock:=5|>``
 
 val mips_backend_preset_def = Define`

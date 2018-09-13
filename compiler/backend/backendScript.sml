@@ -9,6 +9,7 @@ open preamble
      word_to_stackTheory
      stack_to_labTheory
      lab_to_targetTheory
+     stack_to_wasmTheory
 local open primTypesTheory in end
 open word_to_wordTheory
 open jsonLangTheory presLangTheory
@@ -33,8 +34,7 @@ val _ = Datatype`config_preset =
  * where to go after stackLang. *)
 val _ = Datatype`late_config =
   | ToTarget stack_to_lab$config lab_to_target$config
-  (* TODO: The following is in preparation of the wasm target: *)
-  (*| ToWasm   stack_to_wasm$config *)`
+  | ToWasm   stack_to_wasm$config`
 
 (* Actual configuration, usually derived from a config_preset. *)
 val _ = Datatype`config =
@@ -89,15 +89,13 @@ val compile_def = Define`
         (lab_to_target$compile lab_conf c.asm_conf (p:'a prog)) in
       let _ = empty_ffi (strlit "finished: lab_to_target") in
         res
-    | _ => NONE
-    (* TODO: The following is in preparation for a wasm target: *)
-    (* | ToWasm stack_to_wasm_conf => *)
-    (*   let res = stack_to_wasm$compile *)
-    (*     stack_to_wasm_conf c.data_conf (2 * max_heap_limit (:'a) c.data_conf - 1) *)
-    (*     (c.asm_conf.reg_count - (LENGTH c.asm_conf.avoid_regs +3)) *)
-    (*     (c.asm_conf.addr_offset) p in *)
-    (*   let _ = empty_ffi (strlit "finished: stack_to_wasm") in *)
-    (*     res *)`;
+    | ToWasm stack_to_wasm_conf =>
+      let res = stack_to_wasm$compile
+        stack_to_wasm_conf c.data_conf c.asm_conf (2 * max_heap_limit (:'a) c.data_conf - 1)
+         c.word_conf.bitmaps p in
+      let _ = empty_ffi (strlit "finished: stack_to_wasm") in
+        res
+    | _ => NONE`;
 
 val to_flat_def = Define`
   to_flat c p =
@@ -296,11 +294,13 @@ val to_livesets_def = Define`
     let prog = if two_reg_arith then three_to_two_reg rm_prog
                                 else rm_prog in
      (name_num,arg_count,prog)) p in
-  let data = MAP (\(name_num,arg_count,prog).
+  let data = MAP (λ(name_num,arg_count,prog).
     let (heu_moves,spillcosts) = get_heuristics alg name_num prog in
     (get_clash_tree prog,heu_moves,spillcosts,get_forced c.asm_conf prog [])) p
   in
     ((reg_count,data),c,p)`
+
+(* TODO: This broke when integrating wasm. Fix.
 
 val from_livesets_def = Define`
   from_livesets ((k,data),c,p) =
@@ -429,5 +429,5 @@ val compile_explorer_def = Define`
     let res = clos_to_json_table "-annotate" prog::res in
       json_to_string (Array (REVERSE res))`;
 *)
-
+*)
 val _ = export_theory();

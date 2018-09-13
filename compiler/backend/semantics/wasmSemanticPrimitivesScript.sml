@@ -252,8 +252,8 @@ val _ = Define `
 
 (* 4.3.4  Conversions *)
 
-val bytes2word_def = Define `bs2w bs = l2w 8n (MAP w2n bs)`
-val word2bytes_def = Define `w2bs w = (MAP n2w (word_to_oct_list w)):(byte list)`
+val bs2w_def = Define `bs2w bs = l2w 8n (MAP w2n bs)`
+val w2bs_def = Define `w2bs w = (MAP n2w (word_to_oct_list w)):(byte list)`
 
 (* These two variants will guess the width. *)
 val w2ival_def = Define `w2ival (w:'a word) = w2val (Tv Ki (wasm_width (:'a))) w`

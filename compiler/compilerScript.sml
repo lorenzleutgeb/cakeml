@@ -11,6 +11,10 @@ open arm8_presetTheory export_arm8Theory
 open riscv_presetTheory export_riscvTheory
 open mips_presetTheory export_mipsTheory
 open arm6_presetTheory export_arm6Theory
+open export_wasmTheory
+
+(* Only here to distinguish stack_to_wasm$config and stack_to_lab$config. *)
+open stack_to_labTheory
 
 val _ = new_theory"compiler";
 
@@ -76,18 +80,27 @@ val locs_to_string_def = Define `
 (* this is a rather annoying feature of peg_exec requiring locs... *)
 val _ = overload_on("add_locs",``MAP (λc. (c,unknown_loc))``);
 
+(* TODO: Passing in stack and heap size here, which originally belong
+ * to the top configuration is not clean. However, stack_to_wasm needs
+ * this information. Find a way to structure this better. *)
 val preset_to_conf_def = Define`
-  preset_to_conf p wasm =
-    let _ = if wasm then empty_ffi (strlit "wasm is not supported yet. the option will be ignored") else () in
-      <| source_conf       := p.source_conf
-       ; clos_conf         := p.clos_conf
-       ; bvl_conf          := p.bvl_conf
-       ; word_to_word_conf := p.word_to_word_conf
-       ; word_conf         := p.word_conf
-       (* TODO: If wasm = T, generate a late_config of shape ToWasm ... *)
-       ; late_conf         := ToTarget p.stack_conf p.lab_conf
-       ; asm_conf          := p.asm_conf
-       |>`
+  preset_to_conf p wasm heap stack =
+    <| source_conf       := p.source_conf
+     ; clos_conf         := p.clos_conf
+     ; bvl_conf          := p.bvl_conf
+     ; word_to_word_conf := p.word_to_word_conf
+     ; word_conf         := p.word_conf
+     ; late_conf         := (
+       if wasm
+       then ToWasm <| reg_names := p.stack_conf.reg_names
+                    ; jump      := p.stack_conf.jump
+                    ; heap_sz   := heap
+                    ; stack_sz  := stack
+                    |>
+       else ToTarget p.stack_conf p.lab_conf
+     )
+     ; asm_conf          := p.asm_conf
+     |>`
 
 val compile_def = Define`
   compile c prelude input =
@@ -112,7 +125,7 @@ val compile_def = Define`
           let _ = empty_ffi (strlit "finished: type inference") in
           case backend$compile c.backend_config (prelude ++ prog) of
           | NONE => Failure CompileError
-          | SOME (bytes,c) => Success (bytes,c)`;
+          | SOME x => Success x`;
 
 (*
 val compile_explorer_def = Define`
@@ -319,17 +332,17 @@ val conf_ok_check_def = Define`
 
 (* data *)
 val parse_data_conf_def = Define`
-  parse_data_conf ls data =
-  let tag_bits = find_num (strlit "--tag_bits=") ls data.tag_bits in
-  let len_bits = find_num (strlit "--len_bits=") ls data.len_bits in
-  let pad_bits = find_num (strlit "--pad_bits=") ls data.pad_bits in
-  let len_size = find_num (strlit "--len_size=") ls data.len_size in
-  let empty_FFI= find_bool (strlit"--emit_empty_ffi=") ls data.call_empty_ffi in
-  let gc = parse_gc ls data.gc_kind in
+  parse_data_conf ls data_conf =
+  let tag_bits = find_num (strlit "--tag_bits=") ls data_conf.tag_bits in
+  let len_bits = find_num (strlit "--len_bits=") ls data_conf.len_bits in
+  let pad_bits = find_num (strlit "--pad_bits=") ls data_conf.pad_bits in
+  let len_size = find_num (strlit "--len_size=") ls data_conf.len_size in
+  let empty_FFI= find_bool (strlit"--emit_empty_ffi=") ls data_conf.call_empty_ffi in
+  let gc = parse_gc ls data_conf.gc_kind in
   case (tag_bits,len_bits,pad_bits,len_size,gc,empty_FFI) of
     (INL tb,INL lb,INL pb,INL ls,INL gc, INL empty_FFI) =>
       (* TODO: check conf_ok here and raise error if violated *)
-      INL (data with
+      INL (data_conf with
       <| tag_bits := tb;
          len_bits := lb;
          pad_bits := pb;
@@ -346,7 +359,7 @@ val parse_data_conf_def = Define`
 
 (* stack (continueing to lab) *)
 val parse_stack_to_lab_conf_def = Define`
-  parse_stack_to_lab_conf ls stack =
+  parse_stack_to_lab_conf ls (stack:stack_to_lab$config) =
   let jump = find_bool (strlit"--jump=") ls stack.jump in
   case jump of
     INL j => INL (stack with jump:=j)
@@ -438,8 +451,8 @@ val format_compiler_result_def = Define`
   format_compiler_result bytes_export (heap:num) (stack:num) (Failure err) =
     (List[]:mlstring app_list, error_to_str err) ∧
   format_compiler_result bytes_export heap stack
-    (Success (bytes,data,ffi_names)) =
-    (bytes_export ffi_names heap stack bytes data, implode "")`;
+    (Success (bytes,datax,ffi_names)) =
+    (bytes_export ffi_names heap stack bytes datax, implode "")`;
 
 (* The top-level compiler with everything instantiated except it doesn't do exporting *)
 
@@ -450,8 +463,10 @@ val compile_64_def = Define`
   let topconf = parse_top_config cl in
   let wasm = parse_wasm cl in
   case (confexp,topconf,wasm) of
-    (INL (preset,export), INL(heap,stack,sexp,prelude,typeinfer), INL wasm) =>
-    (let ext_conf = extend_conf cl (preset_to_conf preset wasm) in
+    (INL (preset,exportf), INL(heap,stack,sexp,prelude,typeinfer), INL wasm) =>
+    (let ext_conf = extend_conf cl (preset_to_conf preset wasm heap stack) in
+     (* The following is bit hacky, we change our minds on the export in case of wasm... *)
+     let exportf = if wasm then wasm_export else exportf in
     case ext_conf of
       INL ext_conf =>
         let compiler_conf =
@@ -462,7 +477,7 @@ val compile_64_def = Define`
              skip_type_inference := typeinfer |> in
         (case compiler$compile compiler_conf basis input of
           Success (bytes,data,ffi_names) =>
-            (export ffi_names heap stack bytes data, implode "")
+            (exportf ffi_names heap stack bytes data, implode "")
         | Failure err => (List [],error_to_str err))
     | INR err =>
     (List[],error_to_str (ConfigError (get_err_str ext_conf))))
@@ -482,8 +497,10 @@ val compile_32_def = Define`
   let confexp = parse_target_32 cl in
   let topconf = parse_top_config cl in
   case (confexp,topconf) of
-    (INL (preset,export), INL(heap,stack,sexp,prelude,typeinfer)) =>
-    (let ext_conf = extend_conf cl (preset_to_conf preset F (* no wasm for 32bit *)) in
+    (INL (preset,exportf), INL(heap,stack,sexp,prelude,typeinfer)) =>
+    (let ext_conf = extend_conf cl (preset_to_conf preset F (* no wasm for 32bit *) heap stack) in
+     (* The following is bit hacky, we change our minds on the export in case of wasm... *)
+     let exportf = if wasm then wasm_export else exportf in
     case ext_conf of
       INL ext_conf =>
         let compiler_conf =
@@ -494,7 +511,7 @@ val compile_32_def = Define`
              skip_type_inference := typeinfer |> in
         (case compiler$compile compiler_conf basis input of
           Success (bytes,data,ffi_names) =>
-            (export ffi_names heap stack bytes data, implode "")
+            (exportf ffi_names heap stack bytes data, implode "")
         | Failure err => (List [],error_to_str err))
     | INR err =>
     (List[],error_to_str (ConfigError (get_err_str ext_conf))))

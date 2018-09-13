@@ -98,7 +98,7 @@ fun read_comment_from_sml filename = let
                    | SOME line => line);
     val _ = String.isPrefix ("("^"*") hd_line orelse comm_fail ()
     val _ = every_char (not o is_alphanum) hd_line orelse
-              fail "first line must not contain alpha numberic chars"
+              fail "first line must not contain alpha numeric chars"
     val _ = not (String.isSubstring end_comment hd_line) orelse
               fail ("first line must not contain " ^ end_comment)
     (* read first line of comment content *)

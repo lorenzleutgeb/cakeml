@@ -13,6 +13,16 @@ val _ = new_theory "stack_to_wasm";
 
 val _ = patternMatchesLib.ENABLE_PMATCH_CASES();
 
+val _ = Datatype `
+  config =
+    <| reg_names : num num_map
+     (* whether to compile to JumpLower or If Lower ... in stack_remove *)
+     ; jump      : bool
+     (* Memory layout parameters are required for encoding. *)
+     ; heap_sz   : num
+     ; stack_sz  : num
+     |>`
+
 val flip_def = Define `
   (flip Less = NotLess) /\
   (flip Equal = NotEqual) /\
@@ -74,9 +84,8 @@ val extract_ffi_names_def = Define `
       | _                  =>         acc
   ) []`
 
-(* TODO: Implement this ... *)
 val reg_to_global_def = Define `reg_to_global n = n2w n`
-val fp_reg_to_global_def = Define `fp_reg_to_global n = n2w n`
+val fp_reg_to_global_def = Define `fp_reg_to_global n = n2w n (* TODO: Add the number of ordinary registers. *)`
 
 val set_lab_def = Define `set_lab = [Set_global (n2w 42n)]`
 val get_lab_def = Define `get_lab = [Get_global (n2w 42n)]`
@@ -345,43 +354,76 @@ val segment_to_block_def = Define `
       switch (get_lab) (splitall (\x. x = (Block [] [])) (lab ++ lines))
 `
 
-val build_body_def = Define `build_body (bs: ((wasmLang$instr list) list)) = [Block [] []]`
+val build_body_def = Define `
+  build_body (bs: ((wasmLang$instr list) list)) =
+    switch (get_seg) bs`
 
-val _ = Datatype `
-  config =
-   <| reg_names : num num_map
-    ; jump : bool (* whether to compile to JumpLower or If Lower ... in stack_remove*)
-    |>`
-
-(* CakeML measures in mebibytes (=1MiB), WebAssembly measures in pages (=64KiB) *)
-(* (1024 * 1024) / (64 * 1024) = 16 *)
-val mebibytes_to_pages = Define `mebibytes_to_pages = $* 16n`
-
-val create_memory_def = Define `
-  create_memory heap_sz stack_sz = (* TODO: Maybe we need space for other stuff? *)
-    let size = n2w_itself (mebibytes_to_pages (heap_sz + stack_sz), (:32)) in
-    <| type := <| min := size; max := SOME size |> |>`
-
+val w2bs_def = Define `w2bs w = (MAP n2w (word_to_oct_list w)):(byte list)`
+val ws2bs_def = Define `ws2bs = FLAT o MAP w2bs`
 val str2bs_def = Define `str2bs = MAP (\c. n2w_itself (ORD c, (:8)))`
 
-val main_type_def = Define `main_type = Tf [] []`
-val ffi_type_def = Define `ffi_type = Tf [T_i32; T_i32; T_i32; T_i32] []`
+(* CakeML measures in mebibytes (=1MiB), WebAssembly measures in pages (=64KiB) *)
+val mebibytes_to_pages_def = Define `mebibytes_to_pages n = (n * 1024n * 1024n) DIV page_size`
 
-(* TODO: A function that generates a list of globals that respects our configs. *)
+(* Calculates how many pages we need to fit a given number of bytes. *)
+val fit_pages_def = Define `
+fit_pages 0 = 0n /\
+fit_pages n = if n < page_size then 1n else 1n + fit_pages (n - page_size)`
+
+val create_memory_def = Define `
+  create_memory conf (bitmaps: ('a word) list) =
+    let heapnstack = mebibytes_to_pages (conf.heap_sz + conf.stack_sz) in
+    let pages = fit_pages ((LENGTH bitmaps) * dimword (:'a)) in
+    let size = n2w_itself (pages, (:32)) in
+    let mem = <| type := <| min := size; max := SOME size |> |> in
+    let offset = n2w_itself (heapnstack * page_size, (:32)) in
+    let bitmap_mark = <| data := 0w ; offset := Expr [Const (V_i32     0w)]; init := ws2bs [0w:word32; offset] |> in
+    let bitmap_data = <| data := 0w ; offset := Expr [Const (V_i32 offset)]; init := ws2bs bitmaps |> in
+    (mem, [bitmap_mark; bitmap_data])`
+
+(* TODO: Use asm_conf.link_reg for br_table madness? *)
+val asm_to_globals = Define `
+  asm_to_globals conf asm_conf =
+    let heap_sz = conf.heap_sz * 1024n * 1024n in
+    let stack_sz = conf.stack_sz * 1024n * 1024n in
+    let cake_heap = 0n in
+    let cake_stack = heap_sz in
+    let cake_end = cake_stack + stack_sz in
+    [
+      (* The first four are special, since they must be initialized. *)
+      (* The address of main. *)
+      global_zero T_var T_i64;
+      (* First heap address. *)
+      global_zero T_var T_i64;
+      (* First stack address. *)
+      <| type := T_global T_var T_i64; init := Expr [Const (V_i64 (n2w cake_stack))] |>;
+      (* First address after the stack. *)
+      <| type := T_global T_var T_i64; init := Expr [Const (V_i64 (n2w cake_end))] |>;
+    ] ++
+    (* TODO: Should we subtract LENGTH asm_conf.avoid_regs from asm_conf.reg_count? *)
+    (* All other registers. *)
+    (GENLIST (\x. global_zero T_var T_i64) (asm_conf.reg_count - 4n)) ++
+    (* Floating-Point registers. *)
+    (GENLIST (\x. global_zero T_var T_f64) asm_conf.fp_reg_count)
+`
 
 val ffi_names_to_imports_def = Define `
   ffi_names_to_imports ffi_type_index =
     MAP (\x. <| module := str2bs "ffi"; name := str2bs x; desc := Import_func ffi_type_index |>)`
 
+val _ = temp_overload_on("main_type", ``Tf [] []``)
+val _ = temp_overload_on("ffi_type", ``Tf [T_i32; T_i32; T_i32; T_i32] []``)
+
 val wrap_block_def = Define `
-  wrap_block b ffi_names heap_size stack_size =
+  wrap_block b conf asm_conf ffi_names bitmaps =
+    let (mem, data) = create_memory conf bitmaps in
     <| types  := [main_type; ffi_type]
      ; funcs  := [<| type := 0w; locals := []; body := Expr b |>]
-     ; tables := [] (* We are not using a function table. *)
-     ; mems   := [(create_memory heap_size stack_size)]
-     ; globals:= [] (* TODO: Registers and all that. *)
-     ; elem   := [] (* We put no functions in the table. We don't even have a table.*)
-     ; data   := [] (* TODO: Is this true, no data? *)
+     ; tables := []
+     ; mems   := [mem]
+     ; globals:= (asm_to_globals conf asm_conf)
+     ; elem   := []
+     ; data   := data
      ; start  := (SOME <| func := 0w |>)
      ; imports:= (ffi_names_to_imports 1w ffi_names)
      ; exports:= [<| name := str2bs "memory"; desc := Export_mem 0w |>;
@@ -389,19 +431,28 @@ val wrap_block_def = Define `
      |>`
 
 val compile_without_encoding_def = Define `
- compile_without_encoding stack_conf data_conf max_heap sp offset prog =
+ compile_without_encoding conf data_conf asm_conf max_heap bitmaps prog =
+   let sp = asm_conf.reg_count - (LENGTH asm_conf.avoid_regs +3) in
+   let offset = asm_conf.addr_offset in
+   (* First, the intermediate translations from stack_to_lab: *)
    let prog = stack_alloc$compile data_conf prog in
-   let prog = stack_remove$compile stack_conf.jump offset T
+   let prog = stack_remove$compile conf.jump offset T
                 max_heap sp InitGlobals_location prog in
-   let prog = stack_names$compile stack_conf.reg_names prog in
+   let prog = stack_names$compile conf.reg_names prog in
+   (* After all intermediates, extract FFI names. It would be
+    * more cumbersome to extract them from wasm code. *)
    let ffis = FLAT (MAP extract_ffi_names (MAP SND prog)) in
+   (* Now, towards wasm. *)
    let seg_blocks = MAP segment_to_block prog in
    let body = build_body seg_blocks in
-       wrap_block body ffis 1000n 1000n`;
+       wrap_block body conf asm_conf ffis bitmaps`;
+
+(* We report no data and no FFI names, since we encode them into the first element. *)
+val comply_def = Define `comply x = SOME (x, [], [])`
 
 val compile_def = Define `
-  compile stack_conf data_conf max_heap sp offset prog =
-    let module = compile_without_encoding stack_conf data_conf max_heap sp offset prog in
-      enc_module module`
+  compile conf data_conf asm_conf max_heap bitmaps prog =
+    let module = compile_without_encoding conf data_conf asm_conf max_heap bitmaps prog in
+      comply (enc_module module)`
 
 val _ = export_theory()

@@ -151,6 +151,8 @@ val res = translate parse_gc_def;
 val res = translate parse_data_conf_def;
 val res = translate parse_stack_conf_def;
 
+val res = translate preset_to_conf_def;
+
 val res = translate (parse_top_config_def |> SIMP_RULE (srw_ss()) [default_heap_sz_def,default_stack_sz_def]);
 
 (* Translations for each 64-bit target
@@ -158,36 +160,39 @@ val res = translate (parse_top_config_def |> SIMP_RULE (srw_ss()) [default_heap_
 *)
 
 (* x64 *)
-val res = translate x64_configTheory.x64_names_def;
+val res = translate x64_presetTheory.x64_names_def;
 val res = translate export_x64Theory.ffi_asm_def;
 val res = translate export_x64Theory.x64_export_def;
 val res = translate
-  (x64_configTheory.x64_backend_config_def
+  (x64_presetTheory.x64_backend_preset_def
    |> SIMP_RULE(srw_ss())[FUNION_FUPDATE_1]);
 
 (* riscv *)
-val res = translate riscv_configTheory.riscv_names_def;
+val res = translate riscv_presetTheory.riscv_names_def;
 val res = translate export_riscvTheory.ffi_asm_def;
 val res = translate export_riscvTheory.riscv_export_def;
 val res = translate
-  (riscv_configTheory.riscv_backend_config_def
+  (riscv_presetTheory.riscv_backend_preset_def
    |> SIMP_RULE(srw_ss())[FUNION_FUPDATE_1]);
 
 (* mips *)
-val res = translate mips_configTheory.mips_names_def;
+val res = translate mips_presetTheory.mips_names_def;
 val res = translate export_mipsTheory.ffi_asm_def;
 val res = translate export_mipsTheory.mips_export_def;
 val res = translate
-  (mips_configTheory.mips_backend_config_def
+  (mips_presetTheory.mips_backend_preset_def
    |> SIMP_RULE(srw_ss())[FUNION_FUPDATE_1]);
 
 (* arm8 *)
-val res = translate arm8_configTheory.arm8_names_def;
+val res = translate arm8_presetTheory.arm8_names_def;
 val res = translate export_arm8Theory.ffi_asm_def;
 val res = translate export_arm8Theory.arm8_export_def;
 val res = translate
-  (arm8_configTheory.arm8_backend_config_def
+  (arm8_presetTheory.arm8_backend_preset_def
    |> SIMP_RULE(srw_ss())[FUNION_FUPDATE_1]);
+
+(* wasm *)
+val res = translate export_wasmTheory.wasm_export_def;
 
 (* Rest of the translation *)
 val res = translate (extend_conf_def |> spec64 |> SIMP_RULE (srw_ss()) [MEMBER_INTRO]);

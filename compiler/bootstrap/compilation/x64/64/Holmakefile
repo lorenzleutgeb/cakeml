@@ -1,6 +1,6 @@
 ARCH = x64
 WORD_SIZE = 64
-INCLUDES = ../../../translation ../../../../../semantics ../../../.. ../../../../backend/$(ARCH) ../../../../encoders/asm ../../../../encoders/$(ARCH) ../../../../../basis
+INCLUDES = ../../../translation ../../../../../semantics ../../../.. ../../../../backend/$(ARCH) ../../../../backend/wasm ../../../../encoders/asm ../../../../encoders/$(ARCH) ../../../../../basis
 CLINE_OPTIONS = --qof
 
 ifdef POLY

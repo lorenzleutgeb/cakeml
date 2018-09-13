@@ -1,6 +1,9 @@
 Auxiliary files providing glue between a standard HOL installation
 and what we want to use for CakeML development.
 
+[base64Script.sml](base64Script.sml):
+See https://tools.ietf.org/html/rfc4648
+
 [basicComputeLib.sml](basicComputeLib.sml):
 Build a basic compset for evaluation in the logic.
 
