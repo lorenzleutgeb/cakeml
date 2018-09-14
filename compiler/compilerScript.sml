@@ -13,9 +13,6 @@ open mips_presetTheory export_mipsTheory
 open arm6_presetTheory export_arm6Theory
 open export_wasmTheory
 
-(* Only here to distinguish stack_to_wasm$config and stack_to_lab$config. *)
-open stack_to_labTheory
-
 val _ = new_theory"compiler";
 
 (* == Build info =========================================================== *)
@@ -92,9 +89,7 @@ val preset_to_conf_def = Define`
      ; word_conf         := p.word_conf
      ; late_conf         := (
        if wasm
-       then ToWasm <| reg_names := p.stack_conf.reg_names
-                    ; jump      := p.stack_conf.jump
-                    ; heap_sz   := heap
+       then ToWasm <| heap_sz   := heap
                     ; stack_sz  := stack
                     |>
        else ToTarget p.stack_conf p.lab_conf
@@ -359,7 +354,7 @@ val parse_data_conf_def = Define`
 
 (* stack (continueing to lab) *)
 val parse_stack_to_lab_conf_def = Define`
-  parse_stack_to_lab_conf ls (stack:stack_to_lab$config) =
+  parse_stack_to_lab_conf ls stack =
   let jump = find_bool (strlit"--jump=") ls stack.jump in
   case jump of
     INL j => INL (stack with jump:=j)
@@ -476,8 +471,8 @@ val compile_64_def = Define`
              exclude_prelude     := prelude;
              skip_type_inference := typeinfer |> in
         (case compiler$compile compiler_conf basis input of
-          Success (bytes,data,ffi_names) =>
-            (exportf ffi_names heap stack bytes data, implode "")
+          ml_monadBase$Success (bytes,datax,ffi_namesx) =>
+            (exportf ffi_namesx heap stack bytes datax, implode "")
         | Failure err => (List [],error_to_str err))
     | INR err =>
     (List[],error_to_str (ConfigError (get_err_str ext_conf))))
@@ -510,8 +505,8 @@ val compile_32_def = Define`
              exclude_prelude     := prelude;
              skip_type_inference := typeinfer |> in
         (case compiler$compile compiler_conf basis input of
-          Success (bytes,data,ffi_names) =>
-            (exportf ffi_names heap stack bytes data, implode "")
+          Success (bytes,datax,ffi_names) =>
+            (exportf ffi_names heap stack bytes datax, implode "")
         | Failure err => (List [],error_to_str err))
     | INR err =>
     (List[],error_to_str (ConfigError (get_err_str ext_conf))))
