@@ -518,8 +518,6 @@ val compile_32_def = Define`
   case (confexp,topconf) of
     (INL (preset,exportf), INL(heap,stack,sexp,prelude,typeinfer)) =>
     (let ext_conf = extend_conf cl (preset_to_conf preset F (* no wasm for 32bit *) heap stack) in
-     (* The following is bit hacky, we change our minds on the export in case of wasm... *)
-     let exportf = if wasm then wasm_export else exportf in
     case ext_conf of
       INL ext_conf =>
         let compiler_conf =

@@ -1,4 +1,4 @@
-open HolKernel Parse boolLib bossLib
+open preamble
 open wasmLangTheory
 
 val _ = ParseExtras.tight_equality()
