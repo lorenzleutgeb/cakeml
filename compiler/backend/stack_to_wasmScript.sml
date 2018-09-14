@@ -15,12 +15,8 @@ val _ = patternMatchesLib.ENABLE_PMATCH_CASES();
 
 val _ = Datatype `
   config =
-    <| reg_names : num num_map
-     (* whether to compile to JumpLower or If Lower ... in stack_remove *)
-     ; jump      : bool
-     (* Memory layout parameters are required for encoding. *)
-     ; heap_sz   : num
-     ; stack_sz  : num
+    <| heap_sz  : num
+     ; stack_sz : num
      |>`
 
 val flip_def = Define `
@@ -436,9 +432,8 @@ val compile_without_encoding_def = Define `
    let offset = asm_conf.addr_offset in
    (* First, the intermediate translations from stack_to_lab: *)
    let prog = stack_alloc$compile data_conf prog in
-   let prog = stack_remove$compile conf.jump offset T
+   let prog = stack_remove$compile F offset T
                 max_heap sp InitGlobals_location prog in
-   let prog = stack_names$compile conf.reg_names prog in
    (* After all intermediates, extract FFI names. It would be
     * more cumbersome to extract them from wasm code. *)
    let ffis = FLAT (MAP extract_ffi_names (MAP SND prog)) in
