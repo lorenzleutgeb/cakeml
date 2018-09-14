@@ -471,9 +471,9 @@ val compile_64_def = Define`
              exclude_prelude     := prelude;
              skip_type_inference := typeinfer |> in
         (case compiler$compile compiler_conf basis input of
-          ml_monadBase$Success (bytes,datax,ffi_namesx) =>
+          Success (bytes,datax,ffi_namesx) =>
             (exportf ffi_namesx heap stack bytes datax, implode "")
-        | Failure err => (List [],error_to_str err))
+        | Failure err => (misc$List [],error_to_str err))
     | INR err =>
     (List[],error_to_str (ConfigError (get_err_str ext_conf))))
   | _ =>
@@ -494,8 +494,6 @@ val compile_32_def = Define`
   case (confexp,topconf) of
     (INL (preset,exportf), INL(heap,stack,sexp,prelude,typeinfer)) =>
     (let ext_conf = extend_conf cl (preset_to_conf preset F (* no wasm for 32bit *) heap stack) in
-     (* The following is bit hacky, we change our minds on the export in case of wasm... *)
-     let exportf = if wasm then wasm_export else exportf in
     case ext_conf of
       INL ext_conf =>
         let compiler_conf =

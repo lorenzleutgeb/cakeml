@@ -1,5 +1,4 @@
 open preamble backendTheory arm6_targetTheory arm6_targetLib
-open stack_to_labTheory
 
 val _ = new_theory"arm6_preset";
 
