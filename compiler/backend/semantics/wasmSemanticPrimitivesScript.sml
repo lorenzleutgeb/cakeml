@@ -47,6 +47,12 @@ val _ = Datatype `
     | Mem       memaddr
     | Global globaladdr`
 
+(* 4.2.11.1  Conventions *)
+val _ = Define `externval_funcs   = FOLDR (\x l. case x of Func   y => y::l | _ => l) []`
+val _ = Define `externval_tables  = FOLDR (\x l. case x of Table  y => y::l | _ => l) []`
+val _ = Define `externval_mems    = FOLDR (\x l. case x of Mem    y => y::l | _ => l) []`
+val _ = Define `externval_globals = FOLDR (\x l. case x of Global y => y::l | _ => l) []`
+
 (* 4.2.10  Export Instances *)
 val _ = Datatype `exportinst = <| name: name; value: externval |>`
 
@@ -59,6 +65,16 @@ val _ = Datatype `moduleinst =
   ; globaladdrs: globaladdr list
   ; exports    : exportinst list
   |>`
+
+val _ = overload_on("moduleinst_empty", ``
+  <| types      : []
+   ; funcaddrs  : []
+   ; tableaddrs : []
+   ; memaddrs   : []
+   ; globaladdrs: []
+   ; exports    : []
+   |>
+``)
 
 (* 4.2.6  Function Instances
  *
@@ -110,6 +126,8 @@ val _ = Datatype `store =
 
 (* 4.2.12.3  Frames *)
 val _ = Datatype `frame = <| locals: val list; module: moduleinst |>`
+
+val _ = overload_on("frame_empty", ``<| locals := []; module := moduleinst_empty |>``)
 
 (* 4.2.13  Administrative Instructions *)
 
