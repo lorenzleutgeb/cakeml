@@ -71,6 +71,8 @@ val _ = type_abbrev("i64", ``:u64``)
 (* 2.2.4  Names *)
 val _ = type_abbrev("name", ``:(byte list)``)
 
+val string_to_name_def = Define `string_to_name = MAP (\c. n2w_itself (ORD c, (:8)))`
+
 (* 2.3.1  Value Types *)
 (* The spec defines {i,f}{32,64} as atomic types. We separate along "kind"
  * (integer or float) as well as "width" (32bit or 64bit) to have a little

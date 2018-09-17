@@ -16,6 +16,9 @@
 
 open preamble wasmSemanticPrimitivesTheory
 
+(* Needed for module instantiation. *)
+open wasmStaticSemTheory
+
 val _ = ParseExtras.tight_equality()
 
 val _ = new_theory "wasmSem"
@@ -35,6 +38,15 @@ val _ = Datatype `
      ; code:  code
      ; clock: num
      |>`
+
+val _ = overload_on("state_empty", ``
+  <| ffi  : []
+   ; store: []
+   ; frame: []
+   ; code : []
+   ; clock: []
+   |>`
+``)
 
 val expand_def = Define `
   expand s vs es =
@@ -88,6 +100,8 @@ val match_ffi_args_def = Define `
       (SOME (((w2n ptr1, w2n len1), (w2n ptr2, w2n len2)), vs'))
     | _ =>
       NONE`
+
+val check_args_def = Define `types_match ts vs = LIST_REL (\t v. t = typeof v)`
 
 val state_order_quot = `inv_image ($< LEX $<) (\s. (s.clock, ainstr2_size (SND s.code)))`
 val state_order_def = Define `state_order = inv_image ($< LEX $<) (\s. (s.clock, ainstr2_size (SND s.code)))`
@@ -466,5 +480,163 @@ val evaluate_fill_e = Q.store_thm("evaluate_fill_e",
 )
 
 (* TODO: Do we need something like evaluate_expression? *)
+
+(* 4.5.3  Allocation *)
+
+(* 4.5.3.1  Functions *)
+val allocfunc_def = Define `
+  allocfunc store func moduleinst =
+    let funcaddr = LENGTH store.funcs in
+    let functype = EL (w2n func.type) moduleinst.types in
+    let funcinst = Native functype module func in
+    (store with funcs := store.funcs ++ [funcinst], funcaddr)
+`
+
+(* 4.5.3.2  Host Functions *)
+(* Currently, FFIs are the only host functions that can be allocated. *)
+val allochostfunc_foreignfunction_def = Define `
+  allochostfunc store ffi_name =
+    let funcaddr = LENGTH store.funcs in
+    let funcinst = Host (ForeignFunction ffi_name) in
+    (store with funcs := store.funcs ++ [funcinst], funcaddr)
+`
+
+val LIST_MUL = Define `LIST_MUL l n = FUNPOW (APPEND l) n []`
+val LIST_FILL = Define `LIST_FILL x n = LIST_MUL [x] n`
+
+(* 4.5.3.3  Tables *)
+val alloctable_def = Define `
+  alloctable store (T_table tabletype elemtype) =
+    let tableaddr = LENGTH store.tables in
+    let tableinst =  <| elem: LIST_FILL NONE tabletype.min; max: tabletype.max |> in
+    (store with tables := store.tables ++ [tableinst], tableaddr)
+`
+
+(* 4.5.3.4  Memories *)
+val allocmem_def = Define `
+  allocmem store memtype =
+    let memaddr = LENGTH store.mems in
+    let meminst = <| data: LIST_FILL 0w (memtype.min * page_size); memtype.max |> in
+    (store with mems := store.mems ++ [meminst], memaddr)
+
+(* 4.5.3.5  Globals *)
+val allocglobal_def = Define `
+  allocglobal store globbaltype (T_global mut valtype) =
+    let globaladdr = LENGTH store.globals in
+    let globalinst = <| value := v; mut := mut |> in
+    (store with globals := store.globals ++ [globalinst])
+`
+
+(* 4.5.3.6  Growing Tables *)
+val grow_ok_def = Define `
+  growtable_ok tableinst n = case tableinst.max of
+    | SOME m => if LENGTH tableinst.elem + n < tableinst.max then SOME n else NONE
+    | NONE   => SOME n
+`
+
+val growtable_def = Define `
+  growtable tableinst n = OPTION_MAP
+    (\n. tableinst with elem := tableinst.elem ++ LIST_FILL NONE n)
+    (growtable_ok tableinst n)
+`
+
+(* 4.5.3.7  Growing Memories *)
+val growmem_ok_def = Define `
+  growmem_ok meminst n = case meminst.data of
+    | SOME m => if LENGTH meminst.data + n * page_size <= meminst.max * page_size then SOME n else NONE
+    | NONE   => SOME n
+`
+
+val growmem_def = Define `
+  growmem meminst n = OPTION_MAP
+    (\n. meminst with data := meminst.data ++ LIST_FILL 0w (n * page_size))
+    (growtable_ok meminst n)
+`
+
+(* 4.5.3.8  Modules *)
+val allocx_def = Define `
+  allocx (f:store -> 'a -> (store, idx)) store (xs:'a list) = FOLDR
+    (\x. (s, idxs). val (s', idx) = f s x in (s', idx::idxs))
+    (store, [])
+    xs
+`
+
+val moduleinst_from_imports_def = Define `
+  moduleinst_from_imports module imports =
+    <| types       := module.types
+     ; funcaddrs   := externval_funcs   externalvals
+     ; tableaddrs  := externval_tables  imports
+     ; memaddrs    := externval_mems    imports
+     ; globaladdrs := externval_globals imports
+     |>`
+
+val create_export_def = Define `
+  create_export moduleinst export = case export.desc of
+  | Export_func   idx => Func   (EL (w2n idx) meminst.funcs)
+  | Export_table  idx => Table  (EL (w2n idx) meminst.tables)
+  | Export_mem    idx => Mem    (EL (w2n idx) meminst.mems)
+  | Export_global idx => Global (EL (w2n idx) meminst.globals)
+`
+
+val allocmodule_def = Define `
+  allocmodule store module externalvals vs =
+    let moduleinst = moduleinst_from_imports module externalvals in
+    let (s1, funcaddrs) = allocx allocfunc s (MAP (\x. (x, moduleinst)) module.funcs) in
+    let (s2, tableaddrs) = allocx alloctable s1 (MAP (\x. x.type) module.tables) in
+    let (s3, memaddrs) = allocx allocmem s2 (MAP (\x. x.type) module.mems) in
+    let (s', globaladdrs) = allocx allocglobal s3 (MAP (\x. x.type) module.globals) in
+    let moduleinst = moduleinst with
+      <|   funcaddrs := moduleinst.funcaddrs   ++ [  funcaddrs]
+       ;  tableaddrs := moduleinst.tableaddrs  ++ [ tableaddrs]
+       ;    memaddrs := moduleinst.tableaddrs  ++ [ tableaddrs]
+       ; globaladdrs := moduleinst.globaladdrs ++ [globaladdrs]
+       |>
+    let moduleinst = moduleinst with exports := MAP (create_export moduleinst) module.exports in
+      (s', moduleinst)
+`
+
+(* 4.5.5  Invocation *)
+val _ = Datatype `invocation_result = Success (result # 'ffi state) | Failure`
+
+val invoke_def = Define `
+  invoke ffi clock store a vs =
+    if LENGTH store.funcs < a then Failure else
+    let Tf args b = (EL a store.funcs).type in
+    if ~(check_args args vs) then Failure else
+      Success (evaluate_wasm
+        <| code  := (vs, [Invoke a])
+         ; clock := clock
+         ; store := store
+         ; frame := frame_empty
+         ; ffi   := ffi
+         |>
+       )`
+
+val invoke_from_def = Define `invoke_from s = invoke s.ffi s.clock s.store`
+
+(* Turns imports that refer to FFI in external values that represent their implementation. *)
+val stub_ffi_def = Define `
+  stub_ffi module import = if import.module <> (string_to_name "ffi") then NONE else case import.desc of
+  | Import_func typeidx => SOME <| module  |>
+  | _ => NONE
+`
+
+val stub_imports_def = Define `
+  stub_ffi module = MAP (module.imports)
+`
+
+(* 4.5.4  Instantiation *)
+val instantiate_def = Define `
+  instantiate ffi clock imports module = state_empty
+    (* let moduleinst_im = moduleinst_empty with globaladdrs := externval_globals imports in *)
+    (* let f_im = frame_empty with module := moduleinst_im in *)
+    (* let globvals = MAP wasm_evaluate (\g. <| code := ([], [Frame 0 ([], expr_to_instrs g.expr)]); ffi := ffi; clock := clock |>) module.globals in *)
+`
+
+val instantiate_with_stubbed_ffi = Define `
+  instantiate_with_stubbed_ffi ffi clock module = instantiate ffi clock (stub_imports module.imports) module
+`
+
+(* TODO: Observational Semantics *)
 
 val _ = export_theory()
