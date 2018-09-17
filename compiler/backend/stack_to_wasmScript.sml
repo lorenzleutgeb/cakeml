@@ -9,36 +9,32 @@ open wasm_binaryTheory
 local open stack_allocTheory stack_removeTheory stack_namesTheory
            word_to_stackTheory bvl_to_bviTheory in end
 
+(* Parts of this translation currently assume a 64bit architecture, i.e. all stackLang
+ * registers are modeled as i64 globals. It would be possible to implement this
+ * dependent on the stackLang word with and switch to i32 in case the stackLang
+ * word with is smaller than or equal to 32bits, but that would introduce some
+ * complications into the compiler that are desirable and reasonable to avoid
+ * in a first implementation. *)
+
 val _ = new_theory "stack_to_wasm";
 
 val _ = patternMatchesLib.ENABLE_PMATCH_CASES();
 
-val _ = Datatype `
-  config =
-    <| heap_sz  : num
-     ; stack_sz : num
-     |>`
+val _ = Datatype `config = <| heap_sz: num; stack_sz: num |>`
 
 val flip_def = Define `
-  (flip Less = NotLess) /\
-  (flip Equal = NotEqual) /\
-  (flip Lower = NotLower) /\
-  (flip Test = NotTest) /\
-  (flip NotLess = Less) /\
-  (flip NotEqual = Equal) /\
-  (flip NotLower = Lower) /\
-  (flip NotTest = Test)`
+  (flip Equal    = NotEqual) /\
+  (flip Lower    = NotLower) /\
+  (flip Less     = NotLess ) /\
+  (flip Test     = NotTest ) /\
+  (flip NotEqual = Equal   ) /\
+  (flip NotLower = Lower   ) /\
+  (flip NotLess  = Less    ) /\
+  (flip NotTest  = Test    )`
 
 val _ = export_rewrites ["flip_def"];
 
 val _ = temp_overload_on("++",``misc$Append``)
-
-(* See stackSem$evaluate If ..., and labSem$word_cmp *)
-(* TODO: This function should push the values that are to be compared on
- * the stack and jmp the appropriate relop/testop, such that a boolean
- * is left on the stack. *)
-val compile_cmp_def = Define `
-  compile_cmp c r ri = []`
 
 val compile_binop_def = Define `
   compile_binop x= case x of
@@ -54,7 +50,12 @@ val compile_shift_def = Define `
     | Lsl => Shl
     | Lsr => Shr U
     | Asr => Shr S
-    | Ror => Rotr`
+    | Ror => Rotr
+`
+
+(* val flatten_def = Define `flatten = FLAT o (MAP SND)` *)
+val flatten_def = Define `flatten (sections:((num, ('a stackLang$prog)) alist)) = FOLDR (\x acc. stackLang$Seq x acc) Tick ((MAP SND) sections)`
+val uniq_def = Define `uniq = SET_TO_LIST o LIST_TO_SET`
 
 (* Applies f to all "terminals" in p, i.e. all excluding
  * Seq, Call, If, While. *)
@@ -72,13 +73,14 @@ val foldl_prog_def = Define `
 
       | p => f p e`
 
-(* Extracts the names of all foreign functions that instr might call. *)
 val extract_ffi_names_def = Define `
-  extract_ffi_names = foldl_prog (\p acc.
+  extract_ffi_names prog = alist_to_fmap (MAPi
+  (\i name. (name, n2w_itself (i, (:32))))
+  (uniq (foldl_prog (\p acc.
     case p of
       | FFI name _ _ _ _ _ => name :: acc
       | _                  =>         acc
-  ) []`
+  ) [] prog)))`
 
 val reg_to_global_def = Define `reg_to_global n = n2w n`
 val fp_reg_to_global_def = Define `fp_reg_to_global n = n2w n (* TODO: Add the number of ordinary registers. *)`
@@ -91,7 +93,11 @@ val get_seg_def = Define `get_seg = [Get_global (n2w 43n)]`
 val get_reg_def = Define `get_reg r = [Get_global (reg_to_global r)]`
 val set_reg_def = Define `set_reg r = [Set_global (reg_to_global r)]`
 
-val get_ri_def = Define `get_ri (Reg r) width = get_reg r /\ get_ri (Imm w) width = [wasmLang$Const (w2val (Tv Ki width) w)]`
+val get_reg_imm_def = Define `
+  get_reg_imm ri width = if width <> W64 then [] else case ri of
+    | Reg r => get_reg r
+    | Imm i => [wasmLang$Const (V_i64 (w2w i))]
+`
 
 val get_fp_reg_def = Define `get_fp_reg r = [Get_global (fp_reg_to_global r)]`
 val set_fp_reg_def = Define `set_fp_reg r = [Set_global (fp_reg_to_global r)]`
@@ -101,29 +107,48 @@ val continue_def = Define `continue n m = [Br (n2w (n + m))]`
 val fpop_def = Define `fpop result args op = (FLAT (MAP get_fp_reg args)) ++ op ++ (set_fp_reg result)`
 val autowrap_def = Define `autowrap W32 = [] /\ autowrap W64 = [Conversion Wrap]`
 
+(* compile_cmp assumes 64bit words! *)
+val compile_cmp_def = Define `
+  compile_cmp c r ri =
+    let (v, vi) = (get_reg r, get_reg_imm ri W64) in
+    case c of
+    | Equal    => v ++ vi ++ [Relop_i W64 Eq]
+    | Lower    => v ++ vi ++ [Relop_i W64 (Lt U)]
+    | Less     => v ++ vi ++ [Relop_i W64 (Lt S)]
+    | Test     => v ++ [Testop_i W64 Eqz] ++ vi ++ [Testop_i W64 Eqz; Binop_i W64 wasmLang$And]
+    | NotEqual => v ++ vi ++ [Relop_i W64 Ne]
+    | NotLower => v ++ vi ++ [Relop_i W64 (Ge U)]
+    | NotLess  => v ++ vi ++ [Relop_i W64 (Ge S)]
+    | NotEqual => v ++ [Testop_i W64 Eqz] ++ vi ++ [Testop_i W64 Eqz; Binop_i W64 wasmLang$And;
+                        Const (V_i64 1w); Binop_i W64 wasmLang$Xor]
+`
+
 (* Function to map basic instructions. The following does not cover all instrs,
- * but only those for which stackSem$inst actually defines a semantics. *)
+ * but only those for which stackSem$inst actually defines a semantics.
+ * Also, width is currently hardcoded for 64bits, but it should be quite easy
+ * to refactor it to cover the more general case.
+ *)
 val _ = Define `
   compile_inst (x:('a inst)) =
     let
       width = wasm_width (:'a);
       rt = Tv Ki width;
-      vzro = (w2val rt (0w:'a word));
-      vone = (w2val rt (1w:'a word))
-    in case x of
+      vzro = V_i64 0w (* (w2val rt (0w:'a word)) *);
+      vone = V_i64 1w (* (w2val rt (1w:'a word)) *)
+    in if width <> W64 then [] else case x of
       | Skip =>
         [Nop]
-      | Const reg (w:'a word) =>
-        [Const (w2val (Tv Ki width) w)] ++ (set_reg reg)
+      | asm$Const reg w =>
+        [wasmLang$Const (w2val (Tv Ki width) w)] ++ (set_reg reg)
       | Arith (Binop bop r1 r2 ri) =>
-        (get_reg r2) ++ (get_ri ri width) ++ [Binop_i width (compile_binop bop)] ++ (set_reg r1)
+        (get_reg r2) ++ (get_reg_imm ri width) ++ [Binop_i width (compile_binop bop)] ++ (set_reg r1)
       | Arith (Shift sh r1 r2 n) =>
         (get_reg r2) ++ [wasmLang$Const (w2val rt (n2w n:word32))] ++ [Binop_i width (compile_shift sh)] ++ (set_reg r1)
       | Arith (Div r1 r2 r3) =>
         (get_reg r3) ++ (get_reg r2) ++ [Binop_i width (wasmLang$Div U)] ++ (set_reg r1)
       | Arith (AddCarry r1 r2 r3 r4) =>
         (* First, make sure carry is either one or zero, to avoid surprises. *)
-        (*    * stackSem: if c = 0w then 0 else 1 *)
+        (* stackSem: if c = 0w then 0 else 1 *)
         (get_reg r4) ++ [Testop_i width Eqz; wasmLang$If [rt] [Const vzro] [Const vone]] ++ (set_reg r4) ++
         (* Add the two arguments. *)
         (get_reg r2) ++ (get_reg r3) ++ [Binop_i width wasmLang$Add] ++
@@ -271,34 +296,38 @@ val lab2reg_def = Define `lab2reg i l1 l2 = [(wasmLang$Const (V_i64 (word_or (wo
 
 (* Go from top to bottom, and when a new lab is requested: Generate a new Block, put the *)
 (* own code afterwards and recurse into the block. *)
+(* At the moment, we require the list of ffis so we can index into the wasm funcs. That's
+ * slightly, annoying. Maybe there's a nicer way. *)
 local val compile_section_quotation = `
-  compile_section (p:'a stackLang$prog) n m =
-    let width = wasm_width (:'a) in dtcase p of
+  compile_section (p:'a stackLang$prog) (ffis: string |-> funcidx) n m =
+    let width = wasm_width (:'a) in
+    if width <> W64 then ([Unreachable], T, 0) else
+    dtcase p of
     | Tick => ([Nop], F, m)
     | Inst a => (compile_inst a, F, m)
-    | Halt _ => ([], T, m) (* TODO: Set some flag that will stop execution. *)
+    | Halt r1 => ((get_reg r1) ++ [Return], T, m)
 
     | Seq p1 p2 =>
-        let (l1, nr1, m) = compile_section p1 n m ;
-            (l2, nr2, m) = compile_section p2 n m in
-            (l1 ++ l2, nr1 \/ nr2, m)
+      let (l1, nr1, m) = compile_section p1 ffis n m ;
+          (l2, nr2, m) = compile_section p2 ffis n m in
+        (l1 ++ l2, nr1 \/ nr2, m)
 
     | stackLang$If c r ri p1   p2   =>
-          if p1 = Skip /\ p2 = Skip then ([], F, m) else
-          if p1 = Skip then let (l2, nr2, m) = compile_section p2 n m in simple_if n m       c  r ri l2 [] F else
-          if p2 = Skip then let (l1, nr1, m) = compile_section p1 n m in simple_if n m (flip c) r ri l1 [] F else
-          let (l1, nr1, m) = compile_section p1 n m ;
-              (l2, nr2, m) = compile_section p2 n m in
-                   if nr1 then simple_if n m (flip c) r ri l1 l2 nr2
-              else if nr2 then simple_if n m       c  r ri l2 l1 nr1
-              else
-                  ((jmp_if n m c r ri n  m     )        ++ l2 ++
-                   (jmp    n m        n (m + 1)) ++ lab ++ l1 ++ lab, F, m + 2)
+      if p1 = Skip /\ p2 = Skip then ([], F, m) else
+      if p1 = Skip then let (l2, nr2, m) = compile_section p2 ffis n m in simple_if n m       c  r ri l2 [] F else
+      if p2 = Skip then let (l1, nr1, m) = compile_section p1 ffis n m in simple_if n m (flip c) r ri l1 [] F else
+      let (l1, nr1, m) = compile_section p1 ffis n m ;
+          (l2, nr2, m) = compile_section p2 ffis n m in
+             if nr1 then simple_if n m (flip c) r ri l1 l2 nr2
+        else if nr2 then simple_if n m       c  r ri l2 l1 nr1
+        else
+          ((jmp_if n m c r ri n  m     )        ++ l2 ++
+           (jmp    n m        n (m + 1)) ++ lab ++ l1 ++ lab, F, m + 2)
 
     | While c r ri p =>
-        let (l, _, m) = compile_section p n m in
-            (lab ++ (jmp_if n m (flip c) r ri n (m + 1)) ++ l
-                 ++ (jmp    n m               n  m     ) ++ lab, F, m + 2)
+      let (l, _, m) = compile_section p ffis n m in
+          (lab ++ (jmp_if n m (flip c) r ri n (m + 1)) ++ l
+               ++ (jmp    n m               n  m     ) ++ lab, F, m + 2)
 
     | Raise  r   => (jmp_indirect n m r width, T, m)
     | Return r _ => (jmp_indirect n m r width, T, m)
@@ -306,30 +335,34 @@ local val compile_section_quotation = `
 
     | stackLang$Call  NONE                          dest _  => (compile_jump n m dest width, T, m)
     | stackLang$Call (SOME (rhp, rhlr, rhl1, rhl2)) dest eh =>
-        let (rhi, nr1, m) = compile_section rhp n m ;
-            prefix = (lab2reg rhlr rhl1 rhl2) ++ (compile_jump n m dest width) ++ lab ++ rhi in
+      let (rhi, nr1, m) = compile_section rhp ffis n m ;
+          prefix = (lab2reg rhlr rhl1 rhl2) ++ (compile_jump n m dest width) ++ lab ++ rhi in
         (dtcase eh of
         | NONE => (prefix, nr1, m)
         | SOME (ehp, ehl1, ehl2) =>
-          let (ehi, nr2, m) = compile_section ehp n m in
+          let (ehi, nr2, m) = compile_section ehp ffis n m in
               (prefix ++ (jmp n m n m) ++ lab ++ ehi ++ lab, nr1 /\ nr2, m + 1))
 
-    | FFI ffi_index ptr1 len1 ptr2 len2 _ =>
+    | FFI ffi_name ptr1 len1 ptr2 len2 _ =>
+      (case FLOOKUP ffis ffi_name of
+        | SOME idx =>
+          (* Since we must use wasm's Call instruction here, we do not emit a new lab, *)
+          (* do not deal with the link register, etc. *)
+          (* NOTE: We actually do not use the link register even though it was allocated... *)
           ([
             (Const (V_i32 (n2w ptr1)));
             (Const (V_i32 (n2w len1)));
             (Const (V_i32 (n2w ptr2)));
             (Const (V_i32 (n2w len2)));
-            (Call (0w:funcidx) (* TODO: Find out how to get the correct funcidx! *))
-          ], F, n)
-        (* Since we must use wasm's Call instruction here, we do not emit a new lab, *)
-        (*      * do not deal with the link register, etc. *)
-        (*      * NOTE: We actually do not use the link register even though it was allocated... *)
+            (Call idx)
+          ], F, m)
+        | _ => ([Unreachable], F, m)
+      )
 
-    | LocValue i l1 l2 => ((lab2reg i l1 l2), F, m)
+    | stackLang$LocValue i l1 l2 => ((lab2reg i l1 l2), F, m)
 
     (* NOTE: Install and CodeBufferWrite are left out in the initial implementation. *)
-    | _  => ([], F, m)
+    | _  => ([Unreachable], F, m)
 `
 in
 val compile_section_def = Define compile_section_quotation
@@ -344,19 +377,14 @@ val compile_section_def = Define compile_section_quotation
 (*   >> rw[Once compile_def,pairTheory.ELIM_UNCURRY] >> every_case_tac >> fs[]); *)
 end
 
-val segment_to_block_def = Define `
-  segment_to_block (n, p) =
-    let (lines, _, m) = (compile_section p n (next_lab p 1)) in
-      switch (get_lab) (splitall (\x. x = (Block [] [])) (lab ++ lines))
+val section_to_block_def = Define `
+  section_to_block ffis (n, p) =
+    let (lines, _, m) = (compile_section p ffis n (next_lab p 1)) in
+      switch (get_lab) (splitall (\x. [x] = lab) (lab ++ lines))
 `
-
-val build_body_def = Define `
-  build_body (bs: ((wasmLang$instr list) list)) =
-    switch (get_seg) bs`
 
 val w2bs_def = Define `w2bs w = (MAP n2w (word_to_oct_list w)):(byte list)`
 val ws2bs_def = Define `ws2bs = FLAT o MAP w2bs`
-val str2bs_def = Define `str2bs = MAP (\c. n2w_itself (ORD c, (:8)))`
 
 (* CakeML measures in mebibytes (=1MiB), WebAssembly measures in pages (=64KiB) *)
 val mebibytes_to_pages_def = Define `mebibytes_to_pages n = (n * 1024n * 1024n) DIV page_size`
@@ -378,8 +406,12 @@ val create_memory_def = Define `
     (mem, [bitmap_mark; bitmap_data])`
 
 (* TODO: Use asm_conf.link_reg for br_table madness? *)
+(* TODO: This assumes that we have at least for registers. Sounds reasonable, but is not checked. *)
 val asm_to_globals = Define `
-  asm_to_globals conf asm_conf =
+  asm_to_globals conf (asm_conf:'a asm$asm_config) =
+    let width = wasm_width (:'a) in
+    if width <> W64 then [] else
+    let reg_t = Tv Ki width in
     let heap_sz = conf.heap_sz * 1024n * 1024n in
     let stack_sz = conf.stack_sz * 1024n * 1024n in
     let cake_heap = 0n in
@@ -388,66 +420,73 @@ val asm_to_globals = Define `
     [
       (* The first four are special, since they must be initialized. *)
       (* The address of main. *)
-      global_zero T_var T_i64;
+      global_zero T_var reg_t;
       (* First heap address. *)
-      global_zero T_var T_i64;
+      global_zero T_var reg_t;
       (* First stack address. *)
-      <| type := T_global T_var T_i64; init := Expr [Const (V_i64 (n2w cake_stack))] |>;
+      <| type := T_global T_var reg_t; init := Expr [wasmLang$Const (V_i64 (n2w_itself (cake_stack, (:64))))] |>;
       (* First address after the stack. *)
-      <| type := T_global T_var T_i64; init := Expr [Const (V_i64 (n2w cake_end))] |>;
+      <| type := T_global T_var reg_t; init := Expr [wasmLang$Const (V_i64 (n2w_itself (cake_end, (:64))))] |>;
     ] ++
-    (* TODO: Should we subtract LENGTH asm_conf.avoid_regs from asm_conf.reg_count? *)
     (* All other registers. *)
-    (GENLIST (\x. global_zero T_var T_i64) (asm_conf.reg_count - 4n)) ++
+    (GENLIST (\x. global_zero T_var reg_t) (asm_conf.reg_count - asm_conf.reg_count - 4n)) ++
     (* Floating-Point registers. *)
     (GENLIST (\x. global_zero T_var T_f64) asm_conf.fp_reg_count)
 `
 
 val ffi_names_to_imports_def = Define `
   ffi_names_to_imports ffi_type_index =
-    MAP (\x. <| module := str2bs "ffi"; name := str2bs x; desc := Import_func ffi_type_index |>)`
+    MAP (\x. <| module := string_to_name "ffi"; name := string_to_name x; desc := Import_func ffi_type_index |>)`
 
-val _ = temp_overload_on("main_type", ``Tf [] []``)
 val _ = temp_overload_on("ffi_type", ``Tf [T_i32; T_i32; T_i32; T_i32] []``)
 
-val wrap_block_def = Define `
-  wrap_block b conf asm_conf ffi_names bitmaps =
+val wrap_main_def = Define `
+  wrap_main b conf (asm_conf:'a asm$asm_config) (ffis: string |-> word32) (bitmaps:(('a word) list)) =
     let (mem, data) = create_memory conf bitmaps in
-    <| types  := [main_type; ffi_type]
+    let ffi_names = (MAP FST (fmap_to_alist ffis)) in (
+    <| types  := [Tf [] [Tv Ki (wasm_width (:'a))]; ffi_type]
      ; funcs  := [<| type := 0w; locals := []; body := Expr b |>]
      ; tables := []
      ; mems   := [mem]
      ; globals:= (asm_to_globals conf asm_conf)
      ; elem   := []
      ; data   := data
-     ; start  := (SOME <| func := 0w |>)
+     ; start  := NONE (* We cannot use this since our function must return a value. *)
      ; imports:= (ffi_names_to_imports 1w ffi_names)
-     ; exports:= [<| name := str2bs "memory"; desc := Export_mem 0w |>;
-                  <| name := str2bs "main"  ; desc := Export_func 0w|>]
-     |>`
+     ; exports:= [<| name := string_to_name "memory"; desc := Export_mem  0w|>;
+                  <| name := string_to_name "main"  ; desc := Export_func 0w|>]
+     |>, ffi_names)`
+
+val compile_to_module_def = Define `
+  compile_to_module conf asm_conf (bitmaps:(('a word) list)) (prog:((num, ('a stackLang$prog)) alist)) =
+    (* Extract FFI names. We need a global view on them to
+     * generate wasmLang$Call referring by index. *)
+    let ffis = extract_ffi_names (flatten prog) in
+      wrap_main (switch (get_seg) (MAP (section_to_block ffis) prog)) conf asm_conf ffis bitmaps
+`
 
 val compile_without_encoding_def = Define `
- compile_without_encoding conf data_conf asm_conf max_heap bitmaps prog =
-   let sp = asm_conf.reg_count - (LENGTH asm_conf.avoid_regs +3) in
-   let offset = asm_conf.addr_offset in
-   (* First, the intermediate translations from stack_to_lab: *)
+ compile_without_encoding conf data_conf asm_conf max_heap bitmaps (prog:((num, ('a stackLang$prog)) alist)) =
+   (* Compile away GC. *)
    let prog = stack_alloc$compile data_conf prog in
-   let prog = stack_remove$compile F offset T
-                max_heap sp InitGlobals_location prog in
-   (* After all intermediates, extract FFI names. It would be
-    * more cumbersome to extract them from wasm code. *)
-   let ffis = FLAT (MAP extract_ffi_names (MAP SND prog)) in
-   (* Now, towards wasm. *)
-   let seg_blocks = MAP segment_to_block prog in
-   let body = build_body seg_blocks in
-       wrap_block body conf asm_conf ffis bitmaps`;
+   (* Concretise stack. TODO: Directly generate wasm from here? *)
+   let prog = stack_remove$compile
+               F (* jump? *)
+               asm_conf.addr_offset (**)
+               T (* gen_gc? *)
+               max_heap
+               (asm_conf.reg_count - (LENGTH asm_conf.avoid_regs +3))
+               InitGlobals_location
+               prog
+   in
+     compile_to_module conf asm_conf bitmaps prog
+`
 
-(* We report no data and no FFI names, since we encode them into the first element. *)
-val comply_def = Define `comply x = SOME (x, [], [])`
+val comply_def = Define `comply bytes ffis = SOME (bytes, [] (* data *), ffis)`
 
 val compile_def = Define `
   compile conf data_conf asm_conf max_heap bitmaps prog =
-    let module = compile_without_encoding conf data_conf asm_conf max_heap bitmaps prog in
-      comply (enc_module module)`
+    let (module, ffis) = compile_without_encoding conf data_conf asm_conf max_heap bitmaps prog in
+      comply (enc_module module) ffis`
 
 val _ = export_theory()
