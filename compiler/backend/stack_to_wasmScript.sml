@@ -399,7 +399,7 @@ val create_memory_def = Define `
     let heapnstack = mebibytes_to_pages (conf.heap_sz + conf.stack_sz) in
     let pages = fit_pages ((LENGTH bitmaps) * dimword (:'a)) in
     let size = n2w_itself (pages, (:32)) in
-    let mem = <| type := <| min := size; max := SOME size |> |> in
+    let mem = <| type := limits_exact size |> in
     let offset = n2w_itself (heapnstack * page_size, (:32)) in
     let bitmap_mark = <| data := 0w ; offset := Expr [Const (V_i32     0w)]; init := ws2bs [0w:word32; offset] |> in
     let bitmap_data = <| data := 0w ; offset := Expr [Const (V_i32 offset)]; init := ws2bs bitmaps |> in
@@ -439,11 +439,13 @@ val ffi_names_to_imports_def = Define `
     MAP (\x. <| module := ffi_module_name; name := string_to_name x; desc := Import_func ffi_type_index |>)`
 
 
+val main_type_def = Define `main_type width = Tf [] [Tv Ki width]`
+
 val wrap_main_def = Define `
   wrap_main b conf (asm_conf:'a asm$asm_config) (ffis: string |-> word32) (bitmaps:(('a word) list)) =
     let (mem, data) = create_memory conf bitmaps in
     let ffi_names = (MAP FST (fmap_to_alist ffis)) in (
-    <| types  := [Tf [] [Tv Ki (wasm_width (:'a))]; ffi_type]
+    <| types  := [main_type (wasm_width (:'a)); ffi_type]
      ; funcs  := [<| type := 0w; locals := []; body := Expr b |>]
      ; tables := []
      ; mems   := [mem]

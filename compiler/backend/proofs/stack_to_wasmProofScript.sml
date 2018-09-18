@@ -1,8 +1,42 @@
 open preamble
      stackSemTheory stackPropsTheory
+     wasmStaticSemTheory
      wasmSemTheory
 
 val _ = new_theory "stack_to_wasmProof"
+
+val stub_ffi_types_def = Define `
+  stub_ffis_types prog = LIST_FILL (Te_func ffi_type) (FCARD (extract_ffis (flatten prog)))
+`
+
+(* TODO: Do we need correctness theorems for extract_ffis, flatten and create_memory? *)
+val compile_to_module_valid = Q.store_thm("compile_to_module_valid",
+`
+ (!conf asm_conf bitmaps prog.
+     module = compile_to_module conf asm_conf bitmaps (prog: ((num, ('a stackLang$prog)) alist))
+   ==>
+     (?mt. typ_module module
+       (* Imports should be the correct number of functions with an FFI-like signature. *)
+       (stub_ffi_types prog)
+       (* Memory should be exported. TODO: Should we also check its type (=size)? *)
+       [Te_mem mt; Te_func (main_type (wasm_width (:'a)))]
+     )
+ )
+`,
+cheat
+)
+
+val stub_ffis_typ = Q.store_thm("stub_ffis_typ"
+`(!module ffi store (?ck store'.
+    module = compile_to_module conf asm_conf bitmaps (prog: ((num, ('a stackLang$prog)) alist)) /\
+    ffi_types = stub_ffi_types prog /\
+    ffis = stub_ffis (LENGTH ffi_types) /\
+    SOME (moduleinst, store') = instantiate_assuming_validity ffi ck store module ffis
+  ) =>
+    LIST_REL (\v t. typ_externval store v = SOME t) ffis ffi_types
+)`,
+cheat
+)
 
 (* TODO: This is copied from stack_to_lab. Adjust s.t. the following
  * match up:
@@ -66,5 +100,49 @@ val state_rel_def = Define `
     ¬s.use_store ∧
     ¬s.use_alloc ∧
     ¬s.be (* wasm spec is little endian *)`;
+
+(* val evaluate_nop_rel = Q.store_thm("evaluate_nop_rel", *)
+(* ) *)
+
+(* TODO: We should prove that stack_to_wasm produces valid code,
+ * and consequently no TypeErrors can occcur. *)
+
+(* TODO: What is the difference between stackSem$Result and stackSem$Halt?
+ * It seems that Result is what a function call would return. *)
+val sim_r_def = Define `
+  sim_r (stackSem$Result   r) (wasmSemanticPrimitives$Result   (SOME (word_loc_to_val r))) /\
+  sim_r (stackSem$Halt     r) (wasmSemanticPrimitives$Result   (SOME (word_loc_to_val r))) /\
+  sim_r (stackSem$TimeOut   ) (wasmSemanticPrimitives$Timeout   ) /\
+  sim_r (stackSem$FinalFFI r) (wasmSemanticPrimitives$FinalFFI r) /\
+`
+
+val halt_word_view_def = Define`
+  (halt_word_view (Word 0w) = Halt Success) ∧
+  (halt_word_view (Word _)  = Halt Resource_limit_hit) ∧
+  (halt_word_view _ = Error)`;
+val _ = export_rewrites["halt_word_view_def"];
+
+val halt_view_def = Define`
+  (halt_view (SOME (Halt w)) = SOME (halt_word_view w)) ∧
+  (halt_view (SOME (FinalFFI outcome)) = SOME (Halt(FFI_outcome outcome))) ∧
+  (halt_view _ = NONE)`
+
+val _ = export_rewrites["halt_view_def"];
+
+(* Variables "1" are on the stackLang side, and "2" on the WebAssembly side. *)
+val compile_correct = Q.store_thm("compile_correct"
+  `
+    !p1 s1 r1 s1' s2.
+    evaluate (p1, s1) = (r1, s1') /\ r1 <> stackSem$Error /\
+    sims_s s1 s2 /\
+    s2 = instantiate_with_stubbed_imports s1.ffi 0n (compile_to_module conf p1)
+  ==>
+    ?ck r2 s2'.
+    invoke_from (s2 with clock := s2.clock + ck) a [] = (r2, s2') /\
+    sim_s s1' s2' /\ sim_r r1 r2
+  `,
+  recInduct `stackSemTheory_evaluate_ind` >>
+  cheat
+)
 
 val _ = export_theory();
