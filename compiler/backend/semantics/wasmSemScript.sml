@@ -493,6 +493,13 @@ val evaluate_fill_e = Q.store_thm("evaluate_fill_e",
   )
 )
 
+(* TODO: Prove a theorem that for every constant expression there is a clock under which
+ * it evaluates to a value. This should be helpful to prove stuff about initialization,
+ * where constant expressions are evaluated to initialize globals. *)
+(* val const_expr_evaluate_eq_timeout = Q.store_thm("const_expr_evaluate_eq_timeout" *)
+(* `!is s. is_const_expr (Expr is) ==> (?ck. evaluate_wasm ())`, *)
+(* ) *)
+
 (* TODO: Do we need something like evaluate_expression? *)
 (* 4.5.3  Allocation *)
 

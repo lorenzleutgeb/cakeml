@@ -155,6 +155,9 @@ val _ = overload_on("ffi_type", ``Tf [T_i32; T_i32; T_i32; T_i32] []``)
 (* 2.3.4  Limits *)
 val _ = Datatype `limits = <| min: u32; max: u32 option |>`
 
+(* Auxiliary to denote limits that enfore a specific n. *)
+val limits_exact_def = Define `limits_exact n = <| min := n; max := SOME n |>`
+
 (* 2.3.5  Memory Types *)
 (* NOTE: min and max are given in units of page size. According to section 4.2.8
  * one page size is defined as 64KiB = 65536B. *)

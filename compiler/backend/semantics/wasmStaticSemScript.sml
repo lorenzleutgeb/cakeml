@@ -109,6 +109,8 @@ val align_ok_def = Define `align_ok ma n = (2 EXP (w2n ma.align) <= n DIV 8)`
 (* Helper to check whether a context has some defined memory. *)
 val hasmem_def = Define `hasmem c = (c.mems <> [])`
 
+(* TODO: Maybe types should be assigned through functions? *)
+
 (* NOTE: Typing of Instructions is combined with typing of Instruction Sequences. *)
 val (typ_rules, typ_cases, typ_ind) = Hol_reln `
 (* 3.3.1.1 *)
