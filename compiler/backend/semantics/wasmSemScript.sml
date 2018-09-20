@@ -23,6 +23,9 @@ val _ = ParseExtras.tight_equality()
 
 val _ = new_theory "wasmSem"
 
+(* Auxiliary: *)
+val OPTION_DEFAULT = Define `OPTION_DEFAULT NONE x = x /\ OPTION_DEFAULT (SOME y) x = y`
+
 (* For integration with CakeML we define a state which subsumes a configuration,
  * since it contains a store and the the (intermediate) result and stack of the
  * only thread, i.e. its code.
@@ -39,14 +42,13 @@ val _ = Datatype `
      ; clock: num
      |>`
 
-val _ = overload_on("state_empty", ``
-  <| ffi  : []
-   ; store: []
-   ; frame: []
-   ; code : []
-   ; clock: []
+val state_empty_def = Define `state_empty f c s =
+  <| ffi  := f
+   ; store:= s
+   ; frame:= frame_empty
+   ; code := ([], [])
+   ; clock:= c
    |>`
-``)
 
 val expand_def = Define `
   expand s vs es =
@@ -62,7 +64,7 @@ val expand_def = Define `
  * termination proof of wasm_evaluate below. *)
 val expand_dec = Q.store_thm("expand_dec[simp]",
  `expand s vs es = (NONE, s') ==> (($< LEX $<) (s'.clock, ainstr2_size (SND s'.code)) (s.clock, ainstr2_size (SND s.code)))`,
-  rw[expand_def] >> simp [expand_def,LEX_DEF] >> rw [expand_def] >> simp [expand_def,LEX_DEF]
+  rw[expand_def] >> simp [expand_def,pairTheory.LEX_DEF] >> rw [expand_def] >> simp [expand_def,LEX_DEF]
 )
 
 val expand_eq_none = Q.store_thm("expand_eq_none[simp]",
@@ -101,7 +103,7 @@ val match_ffi_args_def = Define `
     | _ =>
       NONE`
 
-val check_args_def = Define `types_match ts vs = LIST_REL (\t v. t = typeof v)`
+val check_args_def = Define `check_args (Tf ts rts) vs = LIST_REL (\t v. t = typeof v) ts vs`
 
 val state_order_quot = `inv_image ($< LEX $<) (\s. (s.clock, ainstr2_size (SND s.code)))`
 val state_order_def = Define `state_order = inv_image ($< LEX $<) (\s. (s.clock, ainstr2_size (SND s.code)))`
@@ -393,6 +395,18 @@ val evaluate_small_def = tDefine "evaluate_small" `
                       )
                       | _ => (SOME (Trap "Host function arguments out of bounds"), s)
           )
+
+      (* 4.5.4 *)
+      | vs, Init_elem a i [] =>
+        resulting s vs
+      | vs, Init_elem a i (x0::xs) =>
+        effect (s with store := (s.store with tables := LUPDATE_MAP (\x. x with elem := (LUPDATE (SOME (EL (w2n x0) s.frame.module.funcaddrs))) (w2n i) x.elem) a s.store.tables)) vs (Init_elem a (word_add i 1w) xs)
+
+      | vs, Init_data a i [] =>
+        resulting s vs
+      | vs, Init_data a i (b0::bs) =>
+        effect (s with store := (s.store with mems := LUPDATE_MAP (\x. x with data := (LUPDATE b0 (w2n i) x.data)) a s.store.mems)) vs (Init_data a (word_add i 1w) bs)
+
       | vs, es =>
         evaluate_nomatch s
 `
@@ -480,25 +494,19 @@ val evaluate_fill_e = Q.store_thm("evaluate_fill_e",
 )
 
 (* TODO: Do we need something like evaluate_expression? *)
-
 (* 4.5.3  Allocation *)
 
 (* 4.5.3.1  Functions *)
 val allocfunc_def = Define `
-  allocfunc store func moduleinst =
-    let funcaddr = LENGTH store.funcs in
-    let functype = EL (w2n func.type) moduleinst.types in
-    let funcinst = Native functype module func in
-    (store with funcs := store.funcs ++ [funcinst], funcaddr)
+  allocfunc s (f, m) =
+    (s with funcs := s.funcs ++ [Native (EL (w2n f.type) m.types) m f], LENGTH s.funcs)
 `
 
 (* 4.5.3.2  Host Functions *)
 (* Currently, FFIs are the only host functions that can be allocated. *)
 val allochostfunc_foreignfunction_def = Define `
-  allochostfunc store ffi_name =
-    let funcaddr = LENGTH store.funcs in
-    let funcinst = Host (ForeignFunction ffi_name) in
-    (store with funcs := store.funcs ++ [funcinst], funcaddr)
+  allochostfunc_foreignfunction s ffi_name =
+    (s with funcs := s.funcs ++ [Host (ForeignFunction ffi_name)], LENGTH s.funcs)
 `
 
 val LIST_MUL = Define `LIST_MUL l n = FUNPOW (APPEND l) n []`
@@ -506,107 +514,101 @@ val LIST_FILL = Define `LIST_FILL x n = LIST_MUL [x] n`
 
 (* 4.5.3.3  Tables *)
 val alloctable_def = Define `
-  alloctable store (T_table tabletype elemtype) =
-    let tableaddr = LENGTH store.tables in
-    let tableinst =  <| elem: LIST_FILL NONE tabletype.min; max: tabletype.max |> in
-    (store with tables := store.tables ++ [tableinst], tableaddr)
+  alloctable s (T_table tt et) =
+    (s with tables := s.tables ++ [<| elem := LIST_FILL NONE (w2n tt.min); max := tt.max |>], LENGTH s.tables)
 `
 
 (* 4.5.3.4  Memories *)
 val allocmem_def = Define `
-  allocmem store memtype =
-    let memaddr = LENGTH store.mems in
-    let meminst = <| data: LIST_FILL 0w (memtype.min * page_size); memtype.max |> in
-    (store with mems := store.mems ++ [meminst], memaddr)
+  allocmem s mt =
+    (s with mems := s.mems ++ [<| data := LIST_FILL 0w ((w2n mt.min) * page_size); max := mt.max |>], LENGTH s.mems)
+`
 
 (* 4.5.3.5  Globals *)
 val allocglobal_def = Define `
-  allocglobal store globbaltype (T_global mut valtype) =
-    let globaladdr = LENGTH store.globals in
-    let globalinst = <| value := v; mut := mut |> in
-    (store with globals := store.globals ++ [globalinst])
+  allocglobal s ((T_global mut valtype), v) =
+    (s with globals := s.globals ++ [<| value := v; mut := mut |>], LENGTH s.globals)
 `
 
 (* 4.5.3.6  Growing Tables *)
 val grow_ok_def = Define `
-  growtable_ok tableinst n = case tableinst.max of
-    | SOME m => if LENGTH tableinst.elem + n < tableinst.max then SOME n else NONE
+  growtable_ok t n = case t.max of
+    | SOME m => if LENGTH t.elem + n < (w2n m) then SOME n else NONE
     | NONE   => SOME n
 `
 
 val growtable_def = Define `
-  growtable tableinst n = OPTION_MAP
-    (\n. tableinst with elem := tableinst.elem ++ LIST_FILL NONE n)
-    (growtable_ok tableinst n)
+  growtable t n = OPTION_MAP
+    (\n. t with elem := t.elem ++ LIST_FILL NONE n)
+    (growtable_ok t n)
 `
 
 (* 4.5.3.7  Growing Memories *)
 val growmem_ok_def = Define `
-  growmem_ok meminst n = case meminst.data of
-    | SOME m => if LENGTH meminst.data + n * page_size <= meminst.max * page_size then SOME n else NONE
+  growmem_ok memi n = case memi.max of
+    | SOME m => if (LENGTH memi.data) + (n * page_size) <= (w2n m) * page_size then SOME n else NONE
     | NONE   => SOME n
 `
 
 val growmem_def = Define `
-  growmem meminst n = OPTION_MAP
-    (\n. meminst with data := meminst.data ++ LIST_FILL 0w (n * page_size))
-    (growtable_ok meminst n)
+  growmem memi n = OPTION_MAP
+    (\n. memi with data := memi.data ++ (LIST_FILL 0w (n * page_size)))
+    (growmem_ok memi n)
 `
 
 (* 4.5.3.8  Modules *)
 val allocx_def = Define `
-  allocx (f:store -> 'a -> (store, idx)) store (xs:'a list) = FOLDR
-    (\x. (s, idxs). val (s', idx) = f s x in (s', idx::idxs))
-    (store, [])
+  allocx (f:store -> 'a -> (store # num)) s (xs:'a list) = FOLDR
+    (\x (s, idxs). let (s', idx) = f s x in (s', idx::idxs))
+    (s, [])
     xs
 `
 
 val moduleinst_from_imports_def = Define `
-  moduleinst_from_imports module imports =
-    <| types       := module.types
-     ; funcaddrs   := externval_funcs   externalvals
-     ; tableaddrs  := externval_tables  imports
-     ; memaddrs    := externval_mems    imports
-     ; globaladdrs := externval_globals imports
+  moduleinst_from_imports (m: module) is =
+    <| types       := m.types
+     ; funcaddrs   := externval_funcs   is
+     ; tableaddrs  := externval_tables  is
+     ; memaddrs    := externval_mems    is
+     ; globaladdrs := externval_globals is
      |>`
 
 val create_export_def = Define `
-  create_export moduleinst export = case export.desc of
-  | Export_func   idx => Func   (EL (w2n idx) meminst.funcs)
-  | Export_table  idx => Table  (EL (w2n idx) meminst.tables)
-  | Export_mem    idx => Mem    (EL (w2n idx) meminst.mems)
-  | Export_global idx => Global (EL (w2n idx) meminst.globals)
-`
+  create_export (m:moduleinst) e = <| name := e.name; value := case e.desc of
+  | Export_func   idx => Func   (EL (w2n idx) m.funcaddrs)
+  | Export_table  idx => Table  (EL (w2n idx) m.tableaddrs)
+  | Export_mem    idx => Mem    (EL (w2n idx) m.memaddrs)
+  | Export_global idx => Global (EL (w2n idx) m.globaladdrs)
+  |>`
 
 val allocmodule_def = Define `
-  allocmodule store module externalvals vs =
-    let moduleinst = moduleinst_from_imports module externalvals in
-    let (s1, funcaddrs) = allocx allocfunc s (MAP (\x. (x, moduleinst)) module.funcs) in
-    let (s2, tableaddrs) = allocx alloctable s1 (MAP (\x. x.type) module.tables) in
-    let (s3, memaddrs) = allocx allocmem s2 (MAP (\x. x.type) module.mems) in
-    let (s', globaladdrs) = allocx allocglobal s3 (MAP (\x. x.type) module.globals) in
-    let moduleinst = moduleinst with
-      <|   funcaddrs := moduleinst.funcaddrs   ++ [  funcaddrs]
-       ;  tableaddrs := moduleinst.tableaddrs  ++ [ tableaddrs]
-       ;    memaddrs := moduleinst.tableaddrs  ++ [ tableaddrs]
-       ; globaladdrs := moduleinst.globaladdrs ++ [globaladdrs]
-       |>
-    let moduleinst = moduleinst with exports := MAP (create_export moduleinst) module.exports in
-      (s', moduleinst)
+  allocmodule s (m:module) externalvals vs =
+    let mi = moduleinst_from_imports m externalvals in
+    let (s1,   funcaddrs) = allocx allocfunc   s  (MAP (\x. (x, mi)) m.funcs) in
+    let (s2,  tableaddrs) = allocx alloctable  s1 (MAP (\x. x.type) m.tables) in
+    let (s3,    memaddrs) = allocx allocmem    s2 (MAP (\x. x.type) m.mems) in
+    let (s', globaladdrs) = allocx allocglobal s3 (ZIP ([](* (m: module).globals *), vs)) in
+    let mi = mi with
+      <|   funcaddrs := mi.funcaddrs   ++   funcaddrs
+       ;  tableaddrs := mi.tableaddrs  ++  tableaddrs
+       ;    memaddrs := mi.tableaddrs  ++  tableaddrs
+       ; globaladdrs := mi.globaladdrs ++ globaladdrs
+       |> in
+    let mi = mi with exports := MAP (create_export mi) m.exports in
+      (s', mi)
 `
 
 (* 4.5.5  Invocation *)
 val _ = Datatype `invocation_result = Success (result # 'ffi state) | Failure`
 
 val invoke_def = Define `
-  invoke ffi clock store a vs =
-    if LENGTH store.funcs < a then Failure else
-    let Tf args b = (EL a store.funcs).type in
-    if ~(check_args args vs) then Failure else
+  invoke ffi clock (s:store) a vs =
+    if LENGTH s.funcs < a then Failure else
+    if ~(check_args (funcinst_type (EL a s.funcs)) vs) then Failure else
       Success (evaluate_wasm
         <| code  := (vs, [Invoke a])
          ; clock := clock
-         ; store := store
+         ; store := s
          ; frame := frame_empty
          ; ffi   := ffi
          |>
@@ -614,27 +616,81 @@ val invoke_def = Define `
 
 val invoke_from_def = Define `invoke_from s = invoke s.ffi s.clock s.store`
 
-(* Turns imports that refer to FFI in external values that represent their implementation. *)
-val stub_ffi_def = Define `
-  stub_ffi module import = if import.module <> (string_to_name "ffi") then NONE else case import.desc of
-  | Import_func typeidx => SOME <| module  |>
-  | _ => NONE
+val is_const_instr_moduleinst_def = Define `
+is_const_instr_moduleinst mi s (Const cv) = T /\
+is_const_instr_moduleinst mi s (Get_global x) = ((LENGTH mi.globaladdrs) < (w2n x) /\ (case (EL (EL (w2n x) mi.globaladdrs) s.globals).mut of T_const => T | _ => F)) /\
+is_const_instr_moduleinst mi s i = F`
+
+val is_const_expr_moduleinst_def = Define `is_const_expr mi s (Expr is) = (EVERY (is_const_instr_moduleinst mi s) is)`
+
+(* For initialization we have expressions of the following types:
+ *  - globals: [ t ]
+ *  - elem:    [i32]
+ *  - data:    [i32]
+ * Therefore we expect a nonempty result. *)
+val eval_const_expr_def = Define `
+  eval_const_expr (s:'ffi state) f (Expr is) =
+    if ~(is_const_expr f.module s.store (Expr is)) then NONE else
+    let (r, s') = evaluate_wasm (s with code := ([], [Frame 0 f ([], (MAP Plain is))])) in
+        case r of
+         | Result (SOME r) => SOME r
+         | _               => NONE
 `
 
-val stub_imports_def = Define `
-  stub_ffi module = MAP (module.imports)
+val init_elem_def = Define `
+  init_elem s f m = OPT_MMAP
+    (\x. OPTION_MAP  (\eo. Init_elem (w2n x.table) (val2w eo) x.init) (eval_const_expr s f x.offset)) m.elem
 `
+
+val init_data_def = Define `
+init_data s f m = OPT_MMAP
+  (\x. OPTION_MAP  (\eo. Init_data (w2n x.data) (val2w eo) x.init) (eval_const_expr s f x.offset)) m.data
+`
+
+val init_globals_def = Define `
+  init_globals s f m = OPT_MMAP
+    (\x. (eval_const_expr s f x.init)) m.globals
+`
+
 
 (* 4.5.4  Instantiation *)
 val instantiate_def = Define `
-  instantiate ffi clock imports module = state_empty
-    (* let moduleinst_im = moduleinst_empty with globaladdrs := externval_globals imports in *)
-    (* let f_im = frame_empty with module := moduleinst_im in *)
-    (* let globvals = MAP wasm_evaluate (\g. <| code := ([], [Frame 0 ([], expr_to_instrs g.expr)]); ffi := ffi; clock := clock |>) module.globals in *)
+  instantiate ffi clock stor (m:module) (imports: externval list) =
+    let state = state_empty ffi clock stor in
+    let minst = moduleinst_empty with globaladdrs := externval_globals imports in
+    let frame = frame_empty with module := minst in
+    case init_globals state frame m of
+    | SOME vs =>
+      let (s', minst) = allocmodule stor m imports vs in
+      let frame = frame_empty with module := minst in
+      let state = (state_empty ffi clock s') with frame := frame in
+      let inite = init_elem state frame m in
+      let initd = init_data state frame m in
+      let start = OPTION_DEFAULT (OPTION_MAP (\x. [Invoke (w2n x.func)]) m.start) [] in
+      case (inite, initd) of
+      | (SOME eis, SOME dis) =>
+        SOME (state with code := ([], eis ++ dis ++ start))
+      | _ => NONE
+    | _ => NONE
+`
+
+val import_to_ffi_name_def = Define `
+  import_to_ffi_name (m:module) i =
+    let module_name = ffi_module_name in
+    case (i.module, i.desc) of
+    | (module_name, Import_func ti) =>
+      if (EL (w2n ti) m.types) = ffi_type then SOME (name_to_string i.name) else NONE
+    | _ => NONE
 `
 
 val instantiate_with_stubbed_ffi = Define `
-  instantiate_with_stubbed_ffi ffi clock module = instantiate ffi clock (stub_imports module.imports) module
+  instantiate_with_stubbed_ffi ffi clock m =
+    case OPT_MMAP (import_to_ffi_name m) m.imports of
+    | SOME ffi_names =>
+      let (s', funcaddrs) = allocx allochostfunc_foreignfunction store_empty ffi_names in
+      let externalvals = MAP (\a. Func a) funcaddrs in
+        instantiate ffi clock s' m externalvals
+    | _ => NONE
 `
 
 (* TODO: Observational Semantics *)

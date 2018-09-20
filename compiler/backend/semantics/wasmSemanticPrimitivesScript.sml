@@ -66,15 +66,15 @@ val _ = Datatype `moduleinst =
   ; exports    : exportinst list
   |>`
 
-val _ = overload_on("moduleinst_empty", ``
-  <| types      : []
-   ; funcaddrs  : []
-   ; tableaddrs : []
-   ; memaddrs   : []
-   ; globaladdrs: []
-   ; exports    : []
+val moduleinst_empty_def = Define `moduleinst_empty =
+  <| types      := []
+   ; funcaddrs  := []
+   ; tableaddrs := []
+   ; memaddrs   := []
+   ; globaladdrs:= []
+   ; exports    := []
    |>
-``)
+`
 
 (* 4.2.6  Function Instances
  *
@@ -102,11 +102,11 @@ val _ = Datatype `
 
 val funcinst_type_def = Define `
 funcinst_type (Native tf m f)            = tf /\
-funcinst_type (Host (ForeignFunction s)) = Tf [T_i32; T_i32; T_i32; T_i32] []`
+funcinst_type (Host (ForeignFunction s)) = ffi_type`
 
 (* 4.2.7  Table Instances *)
 val _ = type_abbrev("funcelem", ``:(funcaddr option)``)
-val _ = Datatype `tableinst = <| elem: funcelem list; max: u32 |>`
+val _ = Datatype `tableinst = <| elem: funcelem list; max: u32 option |>`
 
 (* 4.2.8  Memory Instances *)
 val _ = Datatype `meminst = <| data: byte vec; max: u32 option |>`
@@ -123,6 +123,13 @@ val _ = Datatype `store =
    ; mems   :    meminst list
    ; globals: globalinst list
    |>`
+
+val store_empty_def = Define `store_empty =
+  ((<| funcs  := []
+   ; tables := []
+   ; mems   := []
+   ; globals:= []
+   |>): store)`
 
 (* 4.2.12.3  Frames *)
 val _ = Datatype `frame = <| locals: val list; module: moduleinst |>`

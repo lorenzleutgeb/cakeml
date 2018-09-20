@@ -436,9 +436,8 @@ val asm_to_globals = Define `
 
 val ffi_names_to_imports_def = Define `
   ffi_names_to_imports ffi_type_index =
-    MAP (\x. <| module := string_to_name "ffi"; name := string_to_name x; desc := Import_func ffi_type_index |>)`
+    MAP (\x. <| module := ffi_module_name; name := string_to_name x; desc := Import_func ffi_type_index |>)`
 
-val _ = temp_overload_on("ffi_type", ``Tf [T_i32; T_i32; T_i32; T_i32] []``)
 
 val wrap_main_def = Define `
   wrap_main b conf (asm_conf:'a asm$asm_config) (ffis: string |-> word32) (bitmaps:(('a word) list)) =
