@@ -72,6 +72,7 @@ val _ = type_abbrev("i64", ``:u64``)
 val _ = type_abbrev("name", ``:(byte list)``)
 
 val string_to_name_def = Define `string_to_name = MAP (\c. n2w_itself (ORD c, (:8)))`
+val name_to_string_def = Define `name_to_string = MAP (\c. CHR (w2n c) )`
 
 (* 2.3.1  Value Types *)
 (* The spec defines {i,f}{32,64} as atomic types. We separate along "kind"
@@ -147,6 +148,9 @@ val _ = type_abbrev("resulttype", ``:(valtype list)``)
 val _ = Datatype `functype = Tf (valtype vec) (valtype vec)`
 val _ = set_mapped_fixity {tok = "_>", fixity = Infixr 700, term_name = "Tf"}
 val _ = set_mapped_fixity {tok = "⟿", fixity = Infixr 700, term_name = "Tf"}
+
+(* Function used for foreign functions in CakeML. *)
+val _ = overload_on("ffi_type", ``Tf [T_i32; T_i32; T_i32; T_i32] []``)
 
 (* 2.3.4  Limits *)
 val _ = Datatype `limits = <| min: u32; max: u32 option |>`
@@ -351,6 +355,9 @@ val _ = Datatype `
     | Import_global globaltype`
 
 val _ = Datatype `import = <| module: name; name: name; desc: importdesc |>`
+
+(* Module name used in CakeML for importing foreing functions. *)
+val ffi_module_name_def = Define `ffi_module_name = string_to_name "ffi"`
 
 (* NOTE: The possiblility of multiple tables/mems per module is mentioned at
  *   https://github.com/WebAssembly/design/blob/master/FutureFeatures.md#multiple-tables-and-memories
