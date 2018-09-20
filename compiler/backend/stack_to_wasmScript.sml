@@ -18,7 +18,7 @@ local open stack_allocTheory stack_removeTheory stack_namesTheory
 
 val _ = new_theory "stack_to_wasm";
 
-val _ = patternMatchesLib.ENABLE_PMATCH_CASES();
+val _ = patternMatchesLib.ENABLE_PMATCH_CASES ()
 
 val _ = Datatype `config = <| heap_sz: num; stack_sz: num |>`
 
@@ -406,7 +406,9 @@ val create_memory_def = Define `
     (mem, [bitmap_mark; bitmap_data])`
 
 (* TODO: Use asm_conf.link_reg for br_table madness? *)
-(* TODO: This assumes that we have at least for registers. Sounds reasonable, but is not checked. *)
+(* TODO: This assumes that we have at least four registers. Sounds reasonable, but is not checked. *)
+(* See also https://wiki.cakeml.org/startup-halting#startup-code and
+ * the startup code of export implementations for other target architectures. *)
 val asm_to_globals = Define `
   asm_to_globals conf (asm_conf:'a asm$asm_config) =
     let width = wasm_width (:'a) in
@@ -434,10 +436,12 @@ val asm_to_globals = Define `
     (GENLIST (\x. global_zero T_var T_f64) asm_conf.fp_reg_count)
 `
 
-val ffi_names_to_imports_def = Define `
-  ffi_names_to_imports ffi_type_index =
-    MAP (\x. <| module := ffi_module_name; name := string_to_name x; desc := Import_func ffi_type_index |>)`
-
+val ffi_name_to_import_def = Define `
+  ffi_name_to_import ffi_type_index ffi_name =
+    <| module := ffi_module_name
+     ; name := string_to_name ffi_name
+     ; desc := Import_func ffi_type_index
+     |>`
 
 val main_type_def = Define `main_type width = Tf [] [Tv Ki width]`
 
@@ -453,9 +457,9 @@ val wrap_main_def = Define `
      ; elem   := []
      ; data   := data
      ; start  := NONE (* We cannot use this since our function must return a value. *)
-     ; imports:= (ffi_names_to_imports 1w ffi_names)
+     ; imports:= (MAP (ffi_name_to_import 1w) ffi_names)
      ; exports:= [<| name := string_to_name "memory"; desc := Export_mem  0w|>;
-                  <| name := string_to_name "main"  ; desc := Export_func 0w|>]
+                  <| name := string_to_name "main"  ; desc := Export_func (n2w (LENGTH ffi_names))|>]
      |>, ffi_names)`
 
 val compile_to_module_def = Define `
@@ -470,7 +474,6 @@ val compile_without_encoding_def = Define `
  compile_without_encoding conf data_conf asm_conf max_heap bitmaps (prog:((num, ('a stackLang$prog)) alist)) =
    (* Compile away GC. *)
    let prog = stack_alloc$compile data_conf prog in
-   (* Concretise stack. TODO: Directly generate wasm from here? *)
    let prog = stack_remove$compile
                F (* jump? *)
                asm_conf.addr_offset (**)

@@ -29,7 +29,7 @@ val to_rel_state_agrees = Q.store_thm("to_rel_state_agrees",
 val relsem_to_sem = Q.store_thm("relsem_to_sem",
   `(∀s s' r.
       (evaluate_wasm s = (r, s') ∧ r ≠ Timeout)
-    ⇒
+    <=>
       (∃x. (to_rel_state s) --->* x ∧ state_rel x s' ∧ x.result = (SOME r))
    )`,
   cheat

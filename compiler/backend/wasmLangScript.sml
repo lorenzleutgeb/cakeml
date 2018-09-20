@@ -74,6 +74,27 @@ val _ = type_abbrev("name", ``:(byte list)``)
 val string_to_name_def = Define `string_to_name = MAP (\c. n2w_itself (ORD c, (:8)))`
 val name_to_string_def = Define `name_to_string = MAP (\c. CHR (w2n c) )`
 
+val ORD_MOD_BOUND = Q.store_thm("ORD_MOD_BOUND",
+  `(ORD x) MOD 256n = (ORD x)`,
+  rw [stringTheory.ORD_BOUND]
+)
+
+val CHR_ORD_MOD_EQ_CHR_ORD = Q.store_thm("CHR_ORD_MOD_EQ_CHR_ORD",
+  `CHR ((ORD x) MOD 256n) = CHR (ORD x)`,
+  rw [ORD_MOD_BOUND]
+)
+
+val string_to_name_to_string = Q.store_thm("string_to_name_to_string",
+  `name_to_string (string_to_name s) = s`,
+  rw [name_to_string_def,string_to_name_def] >>
+  Induct_on `s`
+  >- (rw [wordsTheory.n2w_itself_def])
+  >- (
+    rw [listTheory.MAP_EQ_APPEND] >>
+    rw [wordsTheory.n2w_itself_def,CHR_ORD_MOD_EQ_CHR_ORD,stringTheory.CHR_ORD]
+  )
+)
+
 (* 2.3.1  Value Types *)
 (* The spec defines {i,f}{32,64} as atomic types. We separate along "kind"
  * (integer or float) as well as "width" (32bit or 64bit) to have a little

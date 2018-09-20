@@ -501,6 +501,7 @@ val evaluate_fill_e = Q.store_thm("evaluate_fill_e",
 (* ) *)
 
 (* TODO: Do we need something like evaluate_expression? *)
+
 (* 4.5.3  Allocation *)
 
 (* 4.5.3.1  Functions *)
@@ -659,7 +660,6 @@ val init_globals_def = Define `
     (\x. (eval_const_expr s f x.init)) m.globals
 `
 
-
 (* 4.5.4  Instantiation *)
 val instantiate_def = Define `
   instantiate ffi clock stor (m:module) (imports: externval list) =
@@ -690,14 +690,21 @@ val import_to_ffi_name_def = Define `
     | _ => NONE
 `
 
+val stub_ffis_def = Define `
+  stub_ffis m =
+    OPTION_MAP
+      (\ffi_names.
+        let (s', funcaddrs) = allocx allochostfunc_foreignfunction store_empty ffi_names in
+          (s', MAP (\a. Func a) funcaddrs)
+      )
+      (OPT_MMAP (import_to_ffi_name m) m.imports)
+`
+
 val instantiate_with_stubbed_ffi = Define `
   instantiate_with_stubbed_ffi ffi clock m =
-    case OPT_MMAP (import_to_ffi_name m) m.imports of
-    | SOME ffi_names =>
-      let (s', funcaddrs) = allocx allochostfunc_foreignfunction store_empty ffi_names in
-      let externalvals = MAP (\a. Func a) funcaddrs in
-        instantiate ffi clock s' m externalvals
-    | _ => NONE
+    OPTION_MAP
+      (\ (s', externvals). instantiate ffi clock s' m externvals)
+      (stub_ffis m)
 `
 
 (* TODO: Observational Semantics *)

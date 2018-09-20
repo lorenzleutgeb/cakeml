@@ -5,17 +5,25 @@ open preamble
 
 val _ = new_theory "stack_to_wasmProof"
 
+(* TODO: Do we need correctness theorems for extract_ffis, flatten? *)
 val stub_ffi_types_def = Define `
   stub_ffis_types prog = LIST_FILL (Te_func ffi_type) (FCARD (extract_ffis (flatten prog)))
 `
 
-(* TODO: Do we need correctness theorems for extract_ffis, flatten and create_memory? *)
+val compile_ffi_type_second = Q.store_thm("compile_ffi_type_second",
+  `(m, ffis) = compile_to_module conf asm_conf bitmaps p ==> (EL 1 m.types) = ffi_type`
+  fs [stack_to_wasmTheory.compile_to_module_def, stack_to_wasmTheory.wrap_main_def] >>
+  simp [] >>
+  cheat
+)
+
+(* TODO: Do we need correctness theorems for create_memory? *)
 val compile_to_module_valid = Q.store_thm("compile_to_module_valid",
 `
- (!conf asm_conf bitmaps prog.
-     module = compile_to_module conf asm_conf bitmaps (prog: ((num, ('a stackLang$prog)) alist))
+ (!m ffis conf asm_conf bitmaps prog.
+     (m, ffis) = compile_to_module conf asm_conf bitmaps (prog: ((num, ('a stackLang$prog)) alist))
    ==>
-     (?mt. typ_module module
+     (?mt. typ_module m
        (* Imports should be the correct number of functions with an FFI-like signature. *)
        (stub_ffi_types prog)
        (* Memory should be exported. TODO: Should we also check its type (=size)? *)
@@ -23,6 +31,7 @@ val compile_to_module_valid = Q.store_thm("compile_to_module_valid",
      )
  )
 `,
+rpt strip_tac >>
 cheat
 )
 
@@ -36,6 +45,12 @@ val stub_ffis_typ = Q.store_thm("stub_ffis_typ"
     LIST_REL (\v t. typ_externval store v = SOME t) ffis ffi_types
 )`,
 cheat
+)
+
+val ffi_name_to_import_to_ffi_name = Q.store_thm("ffi_names_to_import_to_ffi_name",
+  `EL (w2n ti) m.types = ffi_type ==> import_to_ffi_name m (ffi_name_to_import ti name) = SOME name`,
+  rw [wasmSemTheory.import_to_ffi_name_def,stack_to_wasmTheory.ffi_name_to_import_def] >>
+  rw [wasmLangTheory.string_to_name_to_string]
 )
 
 (* TODO: This is copied from stack_to_lab. Adjust s.t. the following
@@ -135,10 +150,10 @@ val compile_correct = Q.store_thm("compile_correct"
     !p1 s1 r1 s1' s2.
     evaluate (p1, s1) = (r1, s1') /\ r1 <> stackSem$Error /\
     sims_s s1 s2 /\
-    s2 = instantiate_with_stubbed_imports s1.ffi 0n (compile_to_module conf p1)
+    (?ck_init. s2 = instantiate_with_stubbed_ffi s1.ffi 0n (compile_to_module conf p1))
   ==>
     ?ck r2 s2'.
-    invoke_from (s2 with clock := s2.clock + ck) a [] = (r2, s2') /\
+    invoke_from (s2 with clock := s2.clock + ck) a (* TODO: Obtain a somehow. *) [] = (r2, s2') /\
     sim_s s1' s2' /\ sim_r r1 r2
   `,
   recInduct `stackSemTheory_evaluate_ind` >>
