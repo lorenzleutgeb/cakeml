@@ -94,6 +94,7 @@ val preset_to_conf_def = Define`
                     |>
        else ToTarget p.stack_conf p.lab_conf
      )
+     (* TODO: If wasm generate a new asm_conf forcing 32bit addresses and little endian. *)
      ; asm_conf          := p.asm_conf
      |>`
 
