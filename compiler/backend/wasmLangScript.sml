@@ -125,11 +125,11 @@ val _ = Define `widthof (Tv k w) = w`
 val _ = Datatype `val = V_i32 word32 | V_i64 word64 | V_f32 single | V_f64 double`
 
 val typeof_def = Define `
-typeof v = case v of
-             | V_i32 _ => T_i32
-             | V_i64 _ => T_i64
-             | V_f32 _ => T_f32
-             | V_f64 _ => T_f64`
+  typeof v = case v of
+    | V_i32 _ => T_i32
+    | V_i64 _ => T_i64
+    | V_f32 _ => T_f32
+    | V_f64 _ => T_f64`
 
 val zero_def = Define `
 zero (Tv Ki W32) = V_i32 0w /\

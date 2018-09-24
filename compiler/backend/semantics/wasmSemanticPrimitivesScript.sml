@@ -200,7 +200,10 @@ fill_e (Ey n es e   ) filler = ([], [Label n es (fill_e e filler)])`
 (* 4.3  Numerics *)
 (* 4.3.2  Integer Operations *)
 (* NOTE: ctz = count trailing zeros, clz = count leading zeros, popcnt = count 1s *)
-val _ = Define `app_unop_i Ctz c = 0w /\ app_unop_i Clz c = 0w /\ app_unop_i Popcnt c = 0w`
+val _ = Define `
+app_unop_i Clz    (w:'a word) = n2w_itself (if w = 0w then dimindex (:'a) else dimindex (:'a) - 1 - LOG2 (w2n w), (:'a)) /\
+app_unop_i Ctz    (w:'a word) = n2w_itself (if w = 0w then dimindex (:'a) else LOWEST_SET_BIT            (w2n w), (:'a)) /\
+app_unop_i Popcnt (w:'a word) = n2w_itself (bit_count w, (:'a))`
 
 val _ = Define `
   app_binop_i iop c1 c2 = SOME (case iop of
