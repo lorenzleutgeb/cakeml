@@ -106,6 +106,36 @@ val enc_memarg_def = Define `enc_memarg ma = (enc_idx ma.align) ++ (enc_idx ma.o
 
 (* 5.4  Instructions *)
 
+val enc_relop_i_def = Define `
+  enc_relop_i x = case INDEX_OF x [Eq; Ne; Lt S; Lt U; Gt S; Gt U; Le S; Le U; Ge S; Ge U] of
+    | SOME i => (n2w i: byte)
+    | _ => 0w:byte`
+
+val enc_relop_f_def = Define `
+  enc_relop_f x = case INDEX_OF x [Eqf; Nef; Ltf; Gtf; Lef; Gef] of
+    | SOME i => (n2w i: byte)
+    | _ => 0w:byte`
+
+val enc_binop_i_def = Define `
+  enc_binop_i x = case INDEX_OF x [Add; Sub; Mul; Div S; Div U; Rem S; Rem U; And; Or; Xor; Shl; Shr S; Shr U; Rotl; Rotr] of
+    | SOME i => (n2w i: byte)
+    | _ => 0w:byte`
+
+val enc_unop_f_def = Define `
+  enc_unop_f x = case INDEX_OF x [Absf; Negf; Ceilf; Floorf; Truncf; Nearestf; Sqrtf] of
+    | SOME i => (n2w i: byte)
+    | _ => 0w:byte`
+
+val enc_binop_f_def = Define `
+  enc_binop_f x = case INDEX_OF x [Addf; Subf; Mulf; Divf; Min; Max; Copysign] of
+    | SOME i => (n2w i: byte)
+    | _ => 0w:byte`
+
+val enc_conv_def = Define `
+  enc_conv x = case INDEX_OF x [Wrap; Trunc W32 S W32; Trunc W32 U W32; Trunc W32 S W64; Trunc W32 U W64; Extend S; Extend U; Trunc W64 S W32; Trunc W64 U W32; Trunc W64 S W64; Trunc W64 U W64; Convert W32 S W32; Convert W32 U W32; Convert W32 S W64; Convert W32 U W64; Demote; Convert W64 S W32; Convert W64 U W32; Convert W64 S W64; Convert W64 U W64; Promote; Reinterpret T_i32; Reinterpret T_i64; Reinterpret T_f32; Reinterpret T_f64] of
+    | SOME i => (n2w i: byte)
+    | _ => 0w:byte`
+
 val enc_instr_def = tDefine "enc_instr" `
   enc_instr i = (case i of
 (* 5.4.1  Control Instructions *)
@@ -142,8 +172,25 @@ val enc_instr_def = tDefine "enc_instr" `
     | Const (V_i64 v) => [0x42w] ++ (enc_s v)
     | Const (V_f32 v) => [0x43w] ++ (w2bs (float_to_fp32 v))
     | Const (V_f64 v) => [0x44w] ++ (w2bs (float_to_fp64 v))
-(* TODO: All other numeric instructions. *)
-    | _ => []
+    | Testop_i W32 Eqz => [0x45w]
+    | Relop_i W32 r => [word_add 0x46w (enc_relop_i r)]
+    | Testop_i W64 Eqz => [0x50w]
+    | Relop_i W64 r => [word_add 0x51w (enc_relop_i r)]
+    | Relop_f W32 r => [word_add 0x5Bw (enc_relop_f r)]
+    | Relop_f W64 r => [word_add 0x61w (enc_relop_f r)]
+    | Unop_i W32 Clz    => [0x67w]
+    | Unop_i W32 Ctz    => [0x68w]
+    | Unop_i W32 Popcnt => [0x69w]
+    | Binop_i W32 r => [word_add 0x6Aw (enc_binop_i r)]
+    | Unop_i W64 Clz    => [0x79w]
+    | Unop_i W64 Ctz    => [0x7Aw]
+    | Unop_i W64 Popcnt => [0x7Bw]
+    | Binop_i W64 r => [word_add 0x7Cw (enc_binop_i r)]
+    | Unop_f  W32 r => [word_add 0x8Bw (enc_unop_f r)]
+    | Binop_f W32 r => [word_add 0x92w (enc_binop_f r)]
+    | Unop_f  W64 r => [word_add 0x99w (enc_unop_f r)]
+    | Binop_f W64 r => [word_add 0xA0w (enc_binop_f r)]
+    | Conversion c => [word_add 0xA7w (enc_conv c)]
   ) /\
   enc_instrs is = (FLAT (MAP enc_instr is))`
 (
@@ -238,7 +285,7 @@ val _ = overload_on("magic", ``[0x00w; 0x61w; 0x73w; 0x6Dw]``)
 val _ = overload_on("version", ``[0x01w; 0x00w; 0x00w; 0x00w]``)
 
 val enc_module_def = Define `
-enc_module (m:module) =
+enc_module m =
   magic ++
   version ++
   (typesec   m.types) ++
