@@ -128,7 +128,7 @@ val compile_cmp_def = Define `
  * Also, width is currently hardcoded for 64bits, but it should be quite easy
  * to refactor it to cover the more general case.
  *)
-val _ = Define `
+val compile_inst_def = Define `
   compile_inst (x:('a inst)) =
     let
       width = wasm_width (:'a);
@@ -409,7 +409,7 @@ val create_memory_def = Define `
 (* TODO: This assumes that we have at least four registers. Sounds reasonable, but is not checked. *)
 (* See also https://wiki.cakeml.org/startup-halting#startup-code and
  * the startup code of export implementations for other target architectures. *)
-val asm_to_globals = Define `
+val asm_to_globals_def = Define `
   asm_to_globals conf (asm_conf:'a asm$asm_config) =
     let width = wasm_width (:'a) in
     if width <> W64 then [] else

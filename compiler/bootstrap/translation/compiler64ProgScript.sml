@@ -54,7 +54,7 @@ val backend_compile_explorer_side = Q.prove(`
 val def = spec64
   (backendTheory.attach_bitmaps_def
    |> Q.GENL[`bitmaps`,`bytes`,`c`]
-   |> Q.ISPECL[`bitmaps:'a word list`,`bytes:word8 list`,`c:'a lab_to_target$config`])
+   |> Q.ISPECL[`bitmaps:'a word list`,`bytes:word8 list`,`c:string list`])
 
 val res = translate def
 
