@@ -335,6 +335,21 @@ val _ = translate (flatten_def |> spec64)
 
 val _ = translate (compile_def |> spec64)
 
+open stack_to_wasmTheory
+
+(* We only use WebAssembly's f64 in CakeML which is machine_ieeeTheory.double.
+ * Also see binary_ieee.Theory. *)
+val inst_fp64 = INST_TYPE [``:'t``|->``:52``, ``:'w``|->``:11``]
+val _ = translate (inst_fp64 binary_ieeeTheory.float_Sign)
+val _ = translate (inst_fp64 binary_ieeeTheory.float_Exponent)
+val _ = translate (inst_fp64 binary_ieeeTheory.float_Significand)
+
+val _ = translate (wrap_main_def |> spec64)
+val _ = translate (compile_to_module_def |> spec64)
+val _ = translate (compile_without_encoding_def |> spec64)
+val _ = translate (comply_def |> spec64)
+val _ = translate (compile_def |> spec64)
+
 open lab_filterTheory lab_to_targetTheory asmTheory
 
 val _ = translate (spec64 filter_skip_def)
