@@ -436,6 +436,20 @@ val evaluate_wasm_def = tDefine "evaluate_wasm" `
   >> drule evaluate_small_progress >> simp size_and_lex
 )
 
+(* TODO:
+ *  - Theorem that asserts translation of a fill_b match into Breaking ainstr.
+ *  - Theorem that asserts transportation of a Breaking ainstr to the outside by removing blocks.
+ *  - Theorem that asserts equal results for Breaking and a fill_b without any more layers.
+ *)
+(* val evaluate_small_fill_b_eq_breaking = Q.store_thm("evaluate_small_fill_b_eq_breaking", *)
+(*   `(!vs vs' b s s'. *)
+(*      vs = b_vals b /\ s.code = (vs', [Label (LENGTH vs) [] (fill_b b (Plain (Br (n2w (b_depth b)))))]) *)
+(*    ==> *)
+(*      evaluate_small s = (NONE, s') /\ s'.code = (vs', Label (LENGTH vs) [] (fill_b (Breaking (n2w (b_depth b)) vs'))) *)
+(*    )`, *)
+(*   cheat *)
+(* ) *)
+
 val evaluate_fill_b = Q.store_thm("evaluate_fill_b",
   `(!s vs is b.
       s.code = ([], [Label (LENGTH vs) [] (fill_b b (vs, [Plain (Br (n2w (b_depth b)))]))]) /\ LENGTH vs < 2 /\ s.clock > 0
