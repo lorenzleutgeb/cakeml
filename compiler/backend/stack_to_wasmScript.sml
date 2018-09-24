@@ -135,8 +135,8 @@ val compile_cmp_def = Define `
  * Also, width is currently hardcoded for 64bits, but it should be quite easy
  * to refactor it to cover the more general case.
  *)
-val _ = Define `
-  compile_inst_def (asm_conf: 'a asm$asm_config) (x: 'a inst) =
+val compile_inst_def = Define `
+  compile_inst (asm_conf: 'a asm$asm_config) (x: 'a inst) =
     let
       width = wasm_width (:'a);
       rt = Tv Ki width;
