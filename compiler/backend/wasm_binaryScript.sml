@@ -50,8 +50,16 @@ val enc_signed_tests = Q.store_thm("enc_signed_tests",
   EVAL_TAC
 )
 
+(* TODO: enc_signed and enc_unsigned should work for arbitrarily big nums/ints.
+ * However in the spec, most numbers are restricted to be s32/u32, u8 or similar.
+ * These functions might take a second parameter that checks whether the given
+ * parameter fits this range. E.g. enc_u 32 w should only take words that fit
+ * 32bit. *)
+val enc_u_def = Define `enc_u = enc_unsigned o w2n`
+val enc_s_def = Define `enc_s = enc_signed o w2i`
+
 (* 5.1.3  Vectors *)
-val enc_vec_def = Define `enc_vec f v = (enc_unsigned ((n2w (LENGTH v)): word32)) ++ (FLAT (MAP f v)): (byte list)`
+val enc_vec_def = Define `enc_vec f v = (enc_u ((n2w (LENGTH v)): word32)) ++ (FLAT (MAP f v)): (byte list)`
 
 (* 5.2.4  Names *)
 val enc_name_def = Define `enc_name n = enc_vec (\x.[x]) n`
@@ -77,8 +85,8 @@ enc_functype (Tf a b) = [0x60w] ++ (enc_vec (\x. [enc_valtype x]) a) ++ (enc_vec
 (* 5.3.4  Limits *)
 val enc_limits_def = Define `
   enc_limits ls = case ls.max of
-    | NONE     => [0x00w] ++ (enc_unsigned ls.min)
-    | SOME max => [0x01w] ++ (enc_unsigned ls.min) ++ (enc_unsigned max)`
+    | NONE     => [0x00w] ++ (enc_u ls.min)
+    | SOME max => [0x01w] ++ (enc_u ls.min) ++ (enc_u max)`
 
 (* 5.3.5  Memory Types *)
 val _ = overload_on("enc_memtype", ``enc_limits``)
@@ -92,7 +100,7 @@ val enc_mut_def = Define `enc_mut T_const = 0x00w:byte /\ enc_mut T_var = 0x01w:
 val enc_globaltype_def = Define `enc_globaltype (T_global m t) = [enc_valtype t; enc_mut m]`
 
 (* 5.5.1  Indices *)
-val enc_idx_def = Define `enc_idx = enc_unsigned`
+val enc_idx_def = Define `enc_idx (i:word32) = enc_u i`
 
 val enc_memarg_def = Define `enc_memarg ma = (enc_idx ma.align) ++ (enc_idx ma.offset)`
 
@@ -130,8 +138,8 @@ val enc_instr_def = tDefine "enc_instr" `
     | MemorySize       => [0x3Fw; 0x00w]
     | MemoryGrow       => [0x40w; 0x00w]
 (* 5.4.5  Numeric Instructions *)
-    | Const (V_i32 v) => [0x41w] ++ (enc_signed v)
-    | Const (V_i64 v) => [0x42w] ++ (enc_signed v)
+    | Const (V_i32 v) => [0x41w] ++ (enc_s v)
+    | Const (V_i64 v) => [0x42w] ++ (enc_s v)
     | Const (V_f32 v) => [0x43w] ++ (w2bs (float_to_fp32 v))
     | Const (V_f64 v) => [0x44w] ++ (w2bs (float_to_fp64 v))
 (* TODO: All other numeric instructions. *)
@@ -148,7 +156,7 @@ val enc_instr_def = tDefine "enc_instr" `
 val enc_expr_def = Define `enc_expr (Expr is) = (enc_instrs is) ++ [0xBw]`
 
 (* 5.5.2  Sections *)
-val sec_def = Define `sec id bs = [(n2w id):byte] ++ (enc_unsigned (&(LENGTH bs))) ++ bs`
+val sec_def = Define `sec id bs = [(n2w id):byte] ++ (enc_unsigned (LENGTH bs)) ++ bs`
 
 val vecsec_def = Define `vecsec id f [] = [] /\ vecsec id f v = sec id (enc_vec f v)`
 
@@ -198,7 +206,7 @@ val exportsec_def = Define `exportsec = vecsec 7 enc_export`
 (* 5.5.11  Start Section *)
 val startsec_def = Define `
 startsec NONE = [] /\
-startsec (SOME x) = sec 8 (enc_idx x)`
+startsec (SOME x) = sec 8 (enc_idx x.func)`
 
 (* 5.5.12  Element Section *)
 val enc_elem_def = Define `enc_elem e = (enc_idx e.table) ++ (enc_expr e.offset) ++ (enc_vec enc_idx e.init)`
@@ -211,12 +219,12 @@ val LIST_COUNT_DEF = Define `
 LIST_COUNT [] = [] /\
 LIST_COUNT l = REVERSE (FOLDL (\acc curr. let ((prev, count), t) = ((HD acc), (TL acc)) in if prev = curr then (prev, count + 1n)::t else (curr, 1n)::acc) [(HD l, 1n)] (TL l))`
 
-val enc_locals = Define `enc_locals l = (enc_vec (\ (t, n). (enc_unsigned (&n)) ++ [(enc_valtype t)]) (LIST_COUNT l))`
+val enc_locals = Define `enc_locals l = (enc_vec (\ (t, n). (enc_unsigned n) ++ [(enc_valtype t)]) (LIST_COUNT l))`
 
 val enc_func_def = Define `enc_func (locals, body) = (enc_locals locals) ++ (enc_expr body)`
 
 (* TODO: Check for length of f. If it is bigger than 2^32 then we have a problem. *)
-val enc_code_def = Define `enc_code c = let f = enc_func c in (enc_unsigned (&(LENGTH f))) ++ f`
+val enc_code_def = Define `enc_code c = let f = enc_func c in (enc_unsigned (LENGTH f)) ++ f`
 
 val codesec_def = Define `codesec = vecsec 10 enc_code`
 
@@ -230,7 +238,7 @@ val _ = overload_on("magic", ``[0x00w; 0x61w; 0x73w; 0x6Dw]``)
 val _ = overload_on("version", ``[0x01w; 0x00w; 0x00w; 0x00w]``)
 
 val enc_module_def = Define `
-enc_module m =
+enc_module (m:module) =
   magic ++
   version ++
   (typesec   m.types) ++
