@@ -7,11 +7,48 @@ val _ = new_theory "wasm_binary"
 
 val word2bytes_def = Define `w2bs w = (MAP n2w (word_to_oct_list w)):(byte list)`
 
-(* 5.2.2  Integers TODO: LEB128 *)
+(* 5.2.2  Integers *)
 
-val enc_unsigned = Define `enc_unsigned n = []`
+val enc_unsigned_def = Define `
+  enc_unsigned n =
+    let groups = MAP (\x. n2w x: byte) (n2l (dimword (:7)) n) in
+    (MAP (word_or 0x80w) (FRONT groups)) ++ [LAST groups]`
 
-val enc_signed_def = Define `enc_signed i = []`
+(* Taken from a note in 5.2.2 *)
+val enc_unsigned_test_spec = Q.store_thm("enc_unsigned_test_spec",
+  `enc_unsigned 3 = [3w]`,
+  EVAL_TAC
+)
+
+(* Taken from https://en.wikipedia.org/wiki/LEB128#Unsigned_LEB128 *)
+val enc_unsigned_test_wikipedia = Q.store_thm("enc_unsigned_test_wikipedia",
+  `enc_unsigned 624485 = [229w; 142w; 38w]`,
+  EVAL_TAC
+)
+
+val enc_signed_def = Define `
+  enc_signed i =
+    let abs = Num (ABS i) in
+    if i >= 0 then enc_unsigned abs else
+    (* Variable length expansion with 1s to a length that is a multiple of 7. *)
+    let width = (LOG2 abs + 7) DIV 7 * 7 in
+    enc_unsigned (2n EXP width - abs)
+`
+
+val enc_signed_tests = Q.store_thm("enc_signed_tests",
+  `MAP
+     enc_signed
+     [ ~624485i
+     ; ~424091i
+     ; ~9019283812387i
+     ]
+   =
+     [ [0x9bw; 0xf1w; 0x59w]
+     ; [0xe5w; 0x8ew; 0x66w]
+     ; [0xddw; 0x9fw; 0xabw; 0xc6w; 0xc0w; 0xf9w; 0x7dw]
+     ]`,
+  EVAL_TAC
+)
 
 (* 5.1.3  Vectors *)
 val enc_vec_def = Define `enc_vec f v = (enc_unsigned ((n2w (LENGTH v)): word32)) ++ (FLAT (MAP f v)): (byte list)`
