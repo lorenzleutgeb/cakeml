@@ -136,6 +136,17 @@ val enc_conv_def = Define `
     | SOME i => (n2w i: byte)
     | _ => 0w:byte`
 
+val enc_sz_def = Define `
+  enc_sz z = case z of
+    | S8  => 0w
+    | S16 => 1w
+    | S32 => 2w`
+
+val enc_sx_def = Define `
+  enc_sx x = case x of
+    | S => 0w
+    | U => 1w`
+
 val enc_instr_def = tDefine "enc_instr" `
   enc_instr i = (case i of
 (* 5.4.1  Control Instructions *)
@@ -162,9 +173,11 @@ val enc_instr_def = tDefine "enc_instr" `
     | Set_global x => [0x24w] ++ (enc_idx x)
 (* 5.4.4  Memory Instructions *)
     | Load  t       ma => [enc_valtype t - 0x57w] ++ (enc_memarg ma)
-    | Loadi w sz sx ma => [] (* TODO *)
+    | Loadi W32 z x ma => [word_add 0x2Cw (word_add (word_mul 2w (enc_sz z)) (enc_sx x))] ++ (enc_memarg ma)
+    | Loadi W64 z x ma => [word_add 0x30w (word_add (word_mul 2w (enc_sz z)) (enc_sx x))] ++ (enc_memarg ma)
     | Store  t      ma => [enc_valtype t - 0x49w] ++ (enc_memarg ma)
-    | Storei w sz   ma => [] (* TODO *)
+    | Storei W32 z  ma => [word_add 0x3Aw (enc_sz z)]
+    | Storei W64 z  ma => [word_add 0x3Cw (enc_sz z)]
     | MemorySize       => [0x3Fw; 0x00w]
     | MemoryGrow       => [0x40w; 0x00w]
 (* 5.4.5  Numeric Instructions *)
@@ -281,7 +294,7 @@ val enc_data_def = Define `enc_data d = (enc_idx d.data) ++ (enc_expr d.offset) 
 val datasec_def = Define `datasec = vecsec 11 enc_data`
 
 (* 5.5.15  Modules *)
-val _ = overload_on("magic", ``[0x00w; 0x61w; 0x73w; 0x6Dw]``)
+val _ = overload_on("magic",   ``[0x00w; 0x61w; 0x73w; 0x6Dw]``)
 val _ = overload_on("version", ``[0x01w; 0x00w; 0x00w; 0x00w]``)
 
 val enc_module_def = Define `
