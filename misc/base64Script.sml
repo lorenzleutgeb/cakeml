@@ -24,10 +24,8 @@ val _ = Datatype `alphabet = <| name: alphabet_name; code: string; pad: num -> (
 
 val pad_64_def = Define `
   pad_64 n =
-    let m = 3 - (n MOD 3n) in
-      if m = 3
-      then ([], 1n)
-      else (LIST_MUL "=" m, 2 EXP (2 * m))`
+    let (m, m') = EL (n MOD 3n) [(0n,0n);(2,4);(1,2)] in
+    (LIST_MUL "=" m, m')`
 
 val alph_64_def = Define `
   alph_64 =
@@ -45,12 +43,8 @@ val alph_64_url_def = Define `
 
 val pad_32_def = Define `
   pad_32 n =
-    let m = n MOD 5 in
-      if m = 0
-      then ([], 1n)
-      else
-        let x = EL (m - 1) [6;4;5;7] in
-          (LIST_MUL "=" x, 256 * m)`
+    let (m, m') = EL (n MOD 5n) [(0n,0n);(6,2);(4,4);(3,1);(1,3)] in
+    (LIST_MUL "=" m, m')`
 
 val alph_32_def = Define `
   alph_32 =
@@ -70,13 +64,13 @@ val alph_16_def = Define `
   alph_16 =
     <| name := Base16
      ; code := digit ++ (TAKE 6 upper)
-     ; pad  := (\x. ("", 1n))
+     ; pad  := (\x. ("", 0n))
      |>`
 
 val alph_default_def = Define `alph_default = alph_64`
 
 val group_def = Define `
-  group data m pad = REVERSE (n2l m ((l2n 256 (REVERSE (MAP w2n data))) * pad))`
+  group data m pad = REVERSE (n2l m ((l2n 256 (REVERSE (MAP w2n data))) * (2 EXP pad)))`
 
 val encode_alph_def = Define `
   (encode_alph alph [] = []) /\
@@ -96,13 +90,7 @@ val encode_def = Define `encode = encode_alph alph_default`
 val encode_mime_def = Define `
   encode_mime = encode`
 
-val str2bytes = Define `str2bytes = MAP (\c. n2w (ORD c): (8 word))`
-val prefices = Define `prefices s = GENLIST (\i. TAKE i s) (1 + LENGTH s)`
-
-(* val view_def = Define `view width ns = MAP (\x. word_to_bin_string (n2w_itself (x, width))) ns` *)
-
-(* MAP (\alph. MAP ((encode_alph alph) o str2bytes) (prefices "foobar")) [alph_64; alph_64_url; alph_32; alph_32_url; alph_16] *)
-
-(* MAP (\x. encode alph_ (MAP (n2w o ORD) x)) [""; "f"; "fo"; "foo"; "foob"; "fooba"; "foobar"] *)
+(* Test vectors from RFC4648, Section 10: *)
+(* MAP (\x. encode_alph alph_X (MAP (n2w o ORD) x)) [""; "f"; "fo"; "foo"; "foob"; "fooba"; "foobar"] *)
 
 val _ = export_theory()
