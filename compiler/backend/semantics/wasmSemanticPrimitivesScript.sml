@@ -54,7 +54,7 @@ val _ = Define `externval_mems    = FOLDR (\x l. case x of Mem    y => y::l | _ 
 val _ = Define `externval_globals = FOLDR (\x l. case x of Global y => y::l | _ => l) []`
 
 (* 4.2.10  Export Instances *)
-val _ = Datatype `exportinst = <| name: name; value: externval |>`
+val _ = Datatype `exportinst = <| name: (word8 list); value: externval |>`
 
 (* 4.2.5  Module Instances *)
 val _ = Datatype `moduleinst =
