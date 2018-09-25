@@ -183,8 +183,8 @@ val enc_instr_def = tDefine "enc_instr" `
 (* 5.4.5  Numeric Instructions *)
     | Const (V_i32 v) => [0x41w] ++ (enc_s v)
     | Const (V_i64 v) => [0x42w] ++ (enc_s v)
-    | Const (V_f32 v) => [0x43w] ++ (w2bs (float_to_fp32 v))
-    | Const (V_f64 v) => [0x44w] ++ (w2bs (float_to_fp64 v))
+    | Const (V_f32 v) => [0x43w] ++ (w2bs  v)
+    | Const (V_f64 v) => [0x44w] ++ (w2bs  v)
     | Testop_i W32 Eqz => [0x45w]
     | Relop_i W32 r => [word_add 0x46w (enc_relop_i r)]
     | Testop_i W64 Eqz => [0x50w]

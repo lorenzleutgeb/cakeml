@@ -247,40 +247,63 @@ app_relop_i (Ge S) a b = (w2i a >= w2i b)`
  *       https://webassembly.github.io/spec/core/exec/numerics.html#floating-point-operations
  *)
 val _ = Define `
-app_unop_f Negf = float_negate /\
-app_unop_f Absf = float_abs /\
-app_unop_f Ceilf = round roundTowardPositive o float_to_real /\
-app_unop_f Floorf = round roundTowardNegative o float_to_real /\
-app_unop_f Truncf = round roundTowardZero o float_to_real /\
-app_unop_f Nearestf = round roundTiesToEven o float_to_real /\
-app_unop_f Sqrtf c = SND (float_sqrt roundTiesToEven c)`
+app_unop_f Negf     (V_f32 w) = V_f32 (fp32_negate w) /\
+app_unop_f Absf     (V_f32 w) = V_f32 (fp32_abs    w) /\
+app_unop_f Ceilf    (V_f32 w) = V_f32 (fp32_roundToIntegral roundTowardPositive w) /\
+app_unop_f Floorf   (V_f32 w) = V_f32 (fp32_roundToIntegral roundTowardNegative w) /\
+app_unop_f Truncf   (V_f32 w) = V_f32 (fp32_roundToIntegral roundTowardZero     w) /\
+app_unop_f Nearestf (V_f32 w) = V_f32 (fp32_roundToIntegral roundTiesToEven     w) /\
+app_unop_f Sqrtf    (V_f32 w) = V_f32 (fp32_sqrt roundTiesToEven w) /\
 
-val float_min_def = Define `float_min x y = if float_greater_equal x y then y else x`
-val float_max_def = Define `float_max x y = if float_greater_equal x y then x else y`
-val float_copysign = Define `float_copysign x y =(if x.Sign = y.Sign then x else (float_negate x))`
+app_unop_f Negf     (V_f64 w) = V_f64 (fp64_negate w) /\
+app_unop_f Absf     (V_f64 w) = V_f64 (fp64_abs    w) /\
+app_unop_f Ceilf    (V_f64 w) = V_f64 (fp64_roundToIntegral roundTowardPositive w) /\
+app_unop_f Floorf   (V_f64 w) = V_f64 (fp64_roundToIntegral roundTowardNegative w) /\
+app_unop_f Truncf   (V_f64 w) = V_f64 (fp64_roundToIntegral roundTowardZero     w) /\
+app_unop_f Nearestf (V_f64 w) = V_f64 (fp64_roundToIntegral roundTiesToEven     w) /\
+app_unop_f Sqrtf    (V_f64 w) = V_f64 (fp64_sqrt roundTiesToEven w)`
 
-val _ = Define `
-  app_binop_f fop x y = SOME (case fop of
-    | Addf => SND (float_add roundTiesToEven x y)
-    | Subf => SND (float_sub roundTiesToEven x y)
-    | Mulf => SND (float_mul roundTiesToEven x y)
-    | Divf => SND (float_div roundTiesToEven x y)
-    | Min => float_min x y
-    | Max => float_max x y
-    | Copysign => float_copysign x y
-  )`
+val fp32_min_def = Define `fp32_min x y = if fp32_greaterEqual x y then y else x`
+val fp32_max_def = Define `fp32_max x y = if fp32_greaterEqual x y then x else y`
+val fp32_copysign_def = Define `fp32_copysign x y = (if x = (fp32_abs x) <=> y = (fp32_abs y) then x else (fp32_negate x))`
 
-val float_unequal_def = Define `float_unequal x y = ~float_equal x y`
+val fp64_min_def = Define `fp64_min x y = if fp64_greaterEqual x y then y else x`
+val fp64_max_def = Define `fp64_max x y = if fp64_greaterEqual x y then x else y`
+val fp64_copysign_def = Define `fp64_copysign x y = (if x = (fp64_abs x) <=> y = (fp64_abs y) then x else (fp64_negate x))`
 
-val _ = Define `
-  app_relop_f rop = (case rop of
-    | Eqf => float_equal
-    | Nef => float_unequal
-    | Ltf => float_less_than
-    | Gtf => float_greater_than
-    | Lef => float_less_equal
-    | Gef => float_greater_equal
-  )`
+val app_binop_f_def = Define `
+  app_binop_f fop x y = case (fop, x, y) of
+    | (Addf,     (V_f32 a), (V_f32 b)) => SOME (V_f32 (fp32_add roundTiesToEven a b))
+    | (Subf,     (V_f32 a), (V_f32 b)) => SOME (V_f32 (fp32_sub roundTiesToEven a b))
+    | (Mulf,     (V_f32 a), (V_f32 b)) => SOME (V_f32 (fp32_mul roundTiesToEven a b))
+    | (Divf,     (V_f32 a), (V_f32 b)) => SOME (V_f32 (fp32_div roundTiesToEven a b))
+    | (Min,      (V_f32 a), (V_f32 b)) => SOME (V_f32 (fp32_min a b))
+    | (Max,      (V_f32 a), (V_f32 b)) => SOME (V_f32 (fp32_max a b))
+    | (Copysign, (V_f32 a), (V_f32 b)) => SOME (V_f32 (fp32_copysign a b))
+    | (Addf,     (V_f64 a), (V_f64 b)) => SOME (V_f64 (fp64_add roundTiesToEven a b))
+    | (Subf,     (V_f64 a), (V_f64 b)) => SOME (V_f64 (fp64_sub roundTiesToEven a b))
+    | (Mulf,     (V_f64 a), (V_f64 b)) => SOME (V_f64 (fp64_mul roundTiesToEven a b))
+    | (Divf,     (V_f64 a), (V_f64 b)) => SOME (V_f64 (fp64_div roundTiesToEven a b))
+    | (Min,      (V_f64 a), (V_f64 b)) => SOME (V_f64 (fp64_min a b))
+    | (Max,      (V_f64 a), (V_f64 b)) => SOME (V_f64 (fp64_max a b))
+    | (Copysign, (V_f64 a), (V_f64 b)) => SOME (V_f64 (fp64_copysign a b))
+    | _                                => NONE`
+
+val app_relop_f_def = Define `
+  app_relop_f rop x y = case (rop, x, y) of
+    | (Eqf, (V_f32 a), (V_f32 b)) => SOME ( fp32_equal        a b)
+    | (Nef, (V_f32 a), (V_f32 b)) => SOME (~fp32_equal        a b)
+    | (Ltf, (V_f32 a), (V_f32 b)) => SOME ( fp32_lessThan     a b)
+    | (Gtf, (V_f32 a), (V_f32 b)) => SOME ( fp32_greaterThan  a b)
+    | (Lef, (V_f32 a), (V_f32 b)) => SOME ( fp32_lessEqual    a b)
+    | (Gef, (V_f32 a), (V_f32 b)) => SOME ( fp32_greaterEqual a b)
+    | (Eqf, (V_f64 a), (V_f64 b)) => SOME ( fp64_equal        a b)
+    | (Nef, (V_f64 a), (V_f64 b)) => SOME (~fp64_equal        a b)
+    | (Ltf, (V_f64 a), (V_f64 b)) => SOME ( fp64_lessThan     a b)
+    | (Gtf, (V_f64 a), (V_f64 b)) => SOME ( fp64_greaterThan  a b)
+    | (Lef, (V_f64 a), (V_f64 b)) => SOME ( fp64_lessEqual    a b)
+    | (Gef, (V_f64 a), (V_f64 b)) => SOME ( fp64_greaterEqual a b)
+    | _                           => NONE`
 
 (* 4.3.4  Conversions *)
 
@@ -298,26 +321,26 @@ val trunc_def = Define `trunc f t sx = case float_to_int roundTowardZero f of NO
 (* this function implements all cvtops. *)
 val cvt_def = Define `
 cvt (Extend S) (V_i32 v) = SOME (V_i64 (i2w (w2i v))) /\
-cvt (Trunc W32 sx W32) (V_f32 v) = OPTION_MAP V_i32 (trunc v T_i32 sx) /\
-cvt (Trunc W64 sx W32) (V_f32 v) = OPTION_MAP V_i64 (trunc v T_i64 sx) /\
-cvt (Trunc W64 sx W64) (V_f64 v) = OPTION_MAP V_i64 (trunc v T_i64 sx) /\
-cvt (Trunc W32 sx W64) (V_f64 v) = OPTION_MAP V_i32 (trunc v T_i32 sx) /\
+cvt (Trunc W32 sx W32) (V_f32 v) = OPTION_MAP V_i32 (trunc (fp32_to_float v) T_i32 sx) /\
+cvt (Trunc W64 sx W32) (V_f32 v) = OPTION_MAP V_i64 (trunc (fp32_to_float v) T_i64 sx) /\
+cvt (Trunc W64 sx W64) (V_f64 v) = OPTION_MAP V_i64 (trunc (fp64_to_float v) T_i64 sx) /\
+cvt (Trunc W32 sx W64) (V_f64 v) = OPTION_MAP V_i32 (trunc (fp64_to_float v) T_i32 sx) /\
 (* Conversions from i32 to f{32,64} *)
-cvt (Convert W32 U W32) (V_i32 v) = SOME ((V_f32 o real_to_float roundTiesToEven o real_of_num o w2n) v) /\
-cvt (Convert W64 U W32) (V_i32 v) = SOME ((V_f64 o real_to_float roundTiesToEven o real_of_num o w2n) v) /\
-cvt (Convert W32 S W32) (V_i32 v) = SOME ((V_f32 o real_to_float roundTiesToEven o real_of_int o w2i) v) /\
-cvt (Convert W64 S W32) (V_i32 v) = SOME ((V_f64 o real_to_float roundTiesToEven o real_of_int o w2i) v) /\
+cvt (Convert W32 U W32) (V_i32 v) = SOME ((V_f32 o float_to_fp32 o real_to_float roundTiesToEven o real_of_num o w2n) v) /\
+cvt (Convert W64 U W32) (V_i32 v) = SOME ((V_f64 o float_to_fp64 o real_to_float roundTiesToEven o real_of_num o w2n) v) /\
+cvt (Convert W32 S W32) (V_i32 v) = SOME ((V_f32 o float_to_fp32 o real_to_float roundTiesToEven o real_of_int o w2i) v) /\
+cvt (Convert W64 S W32) (V_i32 v) = SOME ((V_f64 o float_to_fp64 o real_to_float roundTiesToEven o real_of_int o w2i) v) /\
 (* Conversions from i64 to f{32,64} *)
-cvt (Convert W32 U W64) (V_i64 v) = SOME ((V_f32 o real_to_float roundTiesToEven o real_of_num o w2n) v) /\
-cvt (Convert W64 U W64) (V_i64 v) = SOME ((V_f64 o real_to_float roundTiesToEven o real_of_num o w2n) v) /\
-cvt (Convert W32 S W64) (V_i64 v) = SOME ((V_f32 o real_to_float roundTiesToEven o real_of_int o w2i) v) /\
-cvt (Convert W64 S W64) (V_i64 v) = SOME ((V_f64 o real_to_float roundTiesToEven o real_of_int o w2i) v) /\
-cvt Demote (V_f64 v) = SOME (w2val T_f32 (fp64_to_fp32 roundTiesToEven (float_to_fp64 v))) /\
-cvt Promote (V_f32 v) = SOME ((w2val T_f64 (fp32_to_fp64 (float_to_fp32 v)))) /\
-cvt (Reinterpret t) (V_f32 v) = SOME (w2val T_i32 (float_to_fp32 v)) /\
-cvt (Reinterpret t) (V_f64 v) = SOME (w2val T_i64 (float_to_fp64 v)) /\
-cvt (Reinterpret t) (V_i32 v) = SOME (V_f32 (fp32_to_float v)) /\
-cvt (Reinterpret t) (V_i64 v) = SOME (V_f64 (fp64_to_float v))
+cvt (Convert W32 U W64) (V_i64 v) = SOME ((V_f32 o float_to_fp32 o real_to_float roundTiesToEven o real_of_num o w2n) v) /\
+cvt (Convert W64 U W64) (V_i64 v) = SOME ((V_f64 o float_to_fp64 o real_to_float roundTiesToEven o real_of_num o w2n) v) /\
+cvt (Convert W32 S W64) (V_i64 v) = SOME ((V_f32 o float_to_fp32 o real_to_float roundTiesToEven o real_of_int o w2i) v) /\
+cvt (Convert W64 S W64) (V_i64 v) = SOME ((V_f64 o float_to_fp64 o real_to_float roundTiesToEven o real_of_int o w2i) v) /\
+cvt Demote (V_f64 v) = SOME (w2val T_f32 (fp64_to_fp32 roundTiesToEven v)) /\
+cvt Promote (V_f32 v) = SOME ((w2val T_f64 (fp32_to_fp64 v))) /\
+cvt (Reinterpret t) (V_f32 v) = SOME (V_i32 v) /\
+cvt (Reinterpret t) (V_f64 v) = SOME (V_i64 v) /\
+cvt (Reinterpret t) (V_i32 v) = SOME (V_f32 v) /\
+cvt (Reinterpret t) (V_i64 v) = SOME (V_f64 v)
 `
 
 (* Some functions that define the semantics of instructions return booleans.
@@ -330,12 +353,6 @@ val wraps_false_def = Define `
 wraps_false v = case v of (V_i32 0w) => T | _ => F`
 
 val arguments_ok = Define `arguments_ok vs (Tf ts rt) = LIST_REL (\v t. t = typeof v) vs ts`
-
-val zero_def = Define `
-zero (Tv Ki W32) = V_i32 0w /\
-zero (Tv Ki W64) = V_i64 0w /\
-zero (Tv Kf W32) = V_f32 (fp32_to_float 0w) /\
-zero (Tv Kf W64) = V_f64 (fp64_to_float 0w)`
 
 val has_def = Define `has xs i x = (i < (LENGTH xs) /\ EL i xs = x)`
 
@@ -364,8 +381,8 @@ val mem_load_def = Define `mem_load s f n ma (V_i32 i) = let (ptr, len) = mem_ra
 val mem_load_t_n_def = Define `
 mem_load_t_n s f (Tv Ki W32) n ma i = OPTION_MAP (V_i32 o bs2w) (mem_load s f n ma i) /\
 mem_load_t_n s f (Tv Ki W64) n ma i = OPTION_MAP (V_i64 o bs2w) (mem_load s f n ma i) /\
-mem_load_t_n s f (Tv Kf W32) n ma i = OPTION_MAP (V_f32 o fp32_to_float o bs2w) (mem_load s f n ma i) /\
-mem_load_t_n s f (Tv Kf W64) n ma i = OPTION_MAP (V_f64 o fp64_to_float o bs2w) (mem_load s f n ma i)
+mem_load_t_n s f (Tv Kf W32) n ma i = OPTION_MAP (V_f32 o bs2w) (mem_load s f n ma i) /\
+mem_load_t_n s f (Tv Kf W64) n ma i = OPTION_MAP (V_f64 o bs2w) (mem_load s f n ma i)
 `
 
 val mem_load_t_def = Define `mem_load_t s f t ma i = mem_load_t_n s f t (bit_width t) ma i`
@@ -386,8 +403,8 @@ val mem_store_def = Define `mem_store s f n ma (V_i32 i) w = let (ptr, len) = me
 val mem_store_t_def = Define `
 mem_store_t s f ma i (V_i32 v) = mem_store s f 32 ma i v /\
 mem_store_t s f ma i (V_i64 v) = mem_store s f 64 ma i v /\
-mem_store_t s f ma i (V_f32 v) = mem_store s f 32 ma i (float_to_fp32 v) /\
-mem_store_t s f ma i (V_f64 v) = mem_store s f 64 ma i (float_to_fp64 v)
+mem_store_t s f ma i (V_f32 v) = mem_store s f 32 ma i v /\
+mem_store_t s f ma i (V_f64 v) = mem_store s f 64 ma i v
 `
 
 (* Variant of mem_store that accounts for a storage size. *)
