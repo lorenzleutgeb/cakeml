@@ -54,7 +54,7 @@ val nlist_last_length = store_thm(
 
 (* 2.1.3  Vectors *)
 (* TODO: Is there a type that better represents a vector? *)
-val _ = type_abbrev("vec", ``:'a list``)
+val _ = temp_type_abbrev("vec", ``:'a list``)
 
 (* 2.2.1  Bytes *)
 val _ = type_abbrev("byte", ``:8 word``)
@@ -69,7 +69,7 @@ val _ = type_abbrev("s64", ``:64 word``)
 val _ = type_abbrev("i64", ``:u64``)
 
 (* 2.2.4  Names *)
-val _ = type_abbrev("name", ``:(byte list)``)
+val _ = temp_type_abbrev("name", ``:(byte list)``)
 
 val string_to_name_def = Define `string_to_name = MAP (\c. n2w_itself (ORD c, (:8)))`
 val name_to_string_def = Define `name_to_string = MAP (\c. CHR (w2n c) )`
@@ -200,7 +200,7 @@ val limits_exact_def = Define `limits_exact n = <| min := n; max := SOME n |>`
 (* NOTE: min and max are given in units of page size. According to section 4.2.8
  * one page size is defined as 64KiB = 65536B. *)
 val _ = overload_on("page_size", ``65536n``)
-val _ = type_abbrev("memtype", ``:limits``)
+val _ = temp_type_abbrev("memtype", ``:limits``)
 
 (* 2.3.6  Table Types *)
 (* NOTE: We only have one constructor for elemtype, which might seem odd,
@@ -267,13 +267,13 @@ val _ = Datatype `memarg = <| offset: word32; align: word32 |>`
 
 (* 2.5.1  Indices *)
 (* Moved up since instr depends on indices. *)
-val _ = type_abbrev(  "typeidx", ``:word32``)
-val _ = type_abbrev(  "funcidx", ``:word32``)
-val _ = type_abbrev( "tableidx", ``:word32``)
-val _ = type_abbrev(   "memidx", ``:word32``)
-val _ = type_abbrev("globalidx", ``:word32``)
-val _ = type_abbrev( "localidx", ``:word32``)
-val _ = type_abbrev( "labelidx", ``:word32``)
+val _ = temp_type_abbrev(  "typeidx", ``:word32``)
+val _ = temp_type_abbrev(  "funcidx", ``:word32``)
+val _ = temp_type_abbrev( "tableidx", ``:word32``)
+val _ = temp_type_abbrev(   "memidx", ``:word32``)
+val _ = temp_type_abbrev("globalidx", ``:word32``)
+val _ = temp_type_abbrev( "localidx", ``:word32``)
+val _ = temp_type_abbrev( "labelidx", ``:word32``)
 
 val _ = Datatype `
   instr =
