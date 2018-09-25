@@ -33,11 +33,11 @@ val _ = new_theory "wasmSemanticPrimitives"
 (* 4.2.4  Addresses *)
 (* https://www.w3.org/TR/2018/WD-wasm-core-1-20180215/#addresses%E2%91%A0 *)
 (* Moved up since externval needs addrs. *)
-val _ = type_abbrev(      "addr", ``:num``)
-val _ = type_abbrev(  "funcaddr", ``:addr``)
-val _ = type_abbrev( "tableaddr", ``:addr``)
-val _ = type_abbrev(   "memaddr", ``:addr``)
-val _ = type_abbrev("globaladdr", ``:addr``)
+val _ = temp_type_abbrev(      "addr", ``:num``)
+val _ = temp_type_abbrev(  "funcaddr", ``:addr``)
+val _ = temp_type_abbrev( "tableaddr", ``:addr``)
+val _ = temp_type_abbrev(   "memaddr", ``:addr``)
+val _ = temp_type_abbrev("globaladdr", ``:addr``)
 
 (* 4.2.11  External Values *)
 val _ = Datatype `
@@ -105,7 +105,7 @@ funcinst_type (Native tf m f)            = tf /\
 funcinst_type (Host (ForeignFunction s)) = ffi_type`
 
 (* 4.2.7  Table Instances *)
-val _ = type_abbrev("funcelem", ``:(funcaddr option)``)
+val _ = temp_type_abbrev("funcelem", ``:(funcaddr option)``)
 val _ = Datatype `tableinst = <| elem: funcelem list; max: u32 option |>`
 
 (* 4.2.8  Memory Instances *)
