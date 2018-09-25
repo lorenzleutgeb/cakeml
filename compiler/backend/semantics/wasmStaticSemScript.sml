@@ -34,7 +34,7 @@ val _ = Datatype `context =
   <| types:   functype   list
    ; funcs:   functype   list
    ; tables:  tabletype  list
-   ; mems:    memtype    list
+   ; mems:    limits     list  (* memtype is the same as limits, see wasmLangTheory *)
    ; globals: globaltype list
    ; locals:  valtype    list
    ; labels:  resulttype list
