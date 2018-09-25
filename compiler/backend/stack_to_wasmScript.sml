@@ -309,7 +309,7 @@ val lab2reg_def = Define `lab2reg i l1 l2 = [(wasmLang$Const (V_i64 (word_or (wo
 (* At the moment, we require the list of ffis so we can index into the wasm funcs. That's
  * slightly, annoying. Maybe there's a nicer way. *)
 local val compile_section_quotation = `
-  compile_section (asm_conf: 'a asm$asm_config) (ffis: string |-> funcidx) (p:'a stackLang$prog) n m =
+  compile_section (asm_conf: 'a asm$asm_config) (ffis: string |-> word32) (p:'a stackLang$prog) n m =
     let width = wasm_width (:'a) in
     if width <> W64 then ([Unreachable], T, 0) else
     dtcase p of
