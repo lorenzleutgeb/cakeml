@@ -333,7 +333,6 @@ val from_livesets_def = Define`
 
 val compile_oracle = Q.store_thm("compile_oracle",`
   from_livesets (to_livesets c p) = compile c p`,
-  cheat>>
   srw_tac[][FUN_EQ_THM,
      to_data_def,
      to_bvi_def,
