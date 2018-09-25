@@ -131,12 +131,6 @@ val typeof_def = Define `
     | V_f32 _ => T_f32
     | V_f64 _ => T_f64`
 
-val zero_def = Define `
-zero (Tv Ki W32) = V_i32 0w /\
-zero (Tv Ki W64) = V_i64 0w /\
-zero (Tv Kf W32) = V_f32 0w /\
-zero (Tv Kf W64) = V_f64 0w`
-
 val val2w_def = Define `
   val2w v = case v of
     | V_i32 w => w2w w
@@ -150,6 +144,29 @@ val w2val_def = Define `
     | Tv Ki W64 => V_i64 o w2w
     | Tv Kf W32 => V_f32 o w2w
     | Tv Kf W64 => V_f64 o w2w`
+
+val w2val2w = Q.store_thm("w2val2w",
+  `w2val (typeof v) (val2w v) = v`,
+  rw [w2val_def, typeof_def, val2w_def] >>
+  Cases_on `v` >>
+  rw [] >>
+  cheat
+  (* simp [wordsTheory.w2w_w2w] *)
+  (* simp [wordsTheory.WORD_w2w_EXTRACT] *)
+  (* simp [wordsTheory.w2w] *)
+)
+
+val val2w2val = Q.store_thm("val2w2val",
+  `val2w (w2val t w) = w`,
+  cheat
+)
+
+val zero_def = Define `
+  zero t = case t of
+    | Tv Ki W32 => V_i32 0w
+    | Tv Ki W64 => V_i64 0w
+    | Tv Kf W32 => V_f32 0w
+    | Tv Kf W64 => V_f64 0w`
 
 val wasm_width_def = Define `wasm_width a = if dimword(a) <= dimword(:32) then W32 else W64`
 

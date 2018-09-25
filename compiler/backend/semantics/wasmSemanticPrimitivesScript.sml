@@ -210,23 +210,23 @@ app_unop_i Ctz    (w:'a word) = n2w_itself (if w = 0w then dimindex (:'a) else L
 app_unop_i Popcnt (w:'a word) = n2w_itself (bit_count w, (:'a))`
 
 val _ = Define `
-  app_binop_i iop c1 c2 = SOME (case iop of
-    | Add => word_add c1 c2
-    | Sub => word_sub c1 c2
-    | Mul => word_mul c1 c2
-    | Div U => word_div c1 c2
+  app_binop_i iop c1 c2 = SOME case iop of
+    | Add   => word_add  c1 c2
+    | Sub   => word_sub  c1 c2
+    | Mul   => word_mul  c1 c2
+    | Div U => word_div  c1 c2
     | Div S => word_sdiv c1 c2
-    | Rem U => word_mod c1 c2
+    | Rem U => word_mod  c1 c2
     | Rem S => word_smod c1 c2
-    | And => word_and c1 c2
-    | Or  => word_or c1 c2
-    | Xor => word_xor c1 c2
-    | Shl   => word_lsl c1 (w2n c2)
-    | Shr U => word_lsr c1 (w2n c2)
-    | Shr S => word_asr c1 (w2n c2)
-    | Rotl => word_rol c1 (w2n c2)
-    | Rotr => word_ror c1 (w2n c2)
-  )`
+    | And   => word_and  c1 c2
+    | Or    => word_or   c1 c2
+    | Xor   => word_xor  c1 c2
+    | Shl   => word_lsl  c1 (w2n c2)
+    | Shr U => word_lsr  c1 (w2n c2)
+    | Shr S => word_asr  c1 (w2n c2)
+    | Rotl  => word_rol  c1 (w2n c2)
+    | Rotr  => word_ror  c1 (w2n c2)
+`
 
 val _ = Define `app_testop_i Eqz c = (c = 0w)`
 
@@ -389,10 +389,10 @@ val mem_load_t_def = Define `mem_load_t s f t ma i = mem_load_t_n s f t (bit_wid
 
 val mem_load_sz_sx_def = Define `
 mem_load_sz_sx s f w tp U ma i = mem_load_t_n s f (Tv Ki w) (bit_width_p tp) ma i /\
-mem_load_sz_sx s f W32 S8 S ma i = OPTION_MAP (\x.((V_i32 o i2w o w2i) ((bs2w x):word8))) (mem_load s f 8 ma i) /\
+mem_load_sz_sx s f W32 S8  S ma i = OPTION_MAP (\x.((V_i32 o i2w o w2i) ((bs2w x):word8 ))) (mem_load s f 8  ma i) /\
 mem_load_sz_sx s f W32 S16 S ma i = OPTION_MAP (\x.((V_i32 o i2w o w2i) ((bs2w x):word16))) (mem_load s f 16 ma i) /\
 mem_load_sz_sx s f W32 S32 S ma i = OPTION_MAP (\x.((V_i32 o i2w o w2i) ((bs2w x):word32))) (mem_load s f 32 ma i) /\
-mem_load_sz_sx s f W64 S8 S ma i = OPTION_MAP (\x.((V_i64 o i2w o w2i) ((bs2w x):word8))) (mem_load s f 8 ma i) /\
+mem_load_sz_sx s f W64 S8  S ma i = OPTION_MAP (\x.((V_i64 o i2w o w2i) ((bs2w x):word8 ))) (mem_load s f 8  ma i) /\
 mem_load_sz_sx s f W64 S16 S ma i = OPTION_MAP (\x.((V_i64 o i2w o w2i) ((bs2w x):word16))) (mem_load s f 16 ma i) /\
 mem_load_sz_sx s f W64 S32 S ma i = OPTION_MAP (\x.((V_i64 o i2w o w2i) ((bs2w x):word32))) (mem_load s f 32 ma i)
 `
