@@ -122,7 +122,7 @@ val _ = Define `widthof (Tv k w) = w`
 (* 4.2.1  Values *)
 (* Along with their types, we also define values. This enables direct definition
  * of the constant instruction. *)
-val _ = Datatype `val = V_i32 word32 | V_i64 word64 | V_f32 single | V_f64 double`
+val _ = Datatype `val = V_i32 word32 | V_i64 word64 | V_f32 word32 | V_f64 word64`
 
 val typeof_def = Define `
   typeof v = case v of
@@ -134,22 +134,22 @@ val typeof_def = Define `
 val zero_def = Define `
 zero (Tv Ki W32) = V_i32 0w /\
 zero (Tv Ki W64) = V_i64 0w /\
-zero (Tv Kf W32) = V_f32 (fp32_to_float 0w) /\
-zero (Tv Kf W64) = V_f64 (fp64_to_float 0w)`
+zero (Tv Kf W32) = V_f32 0w /\
+zero (Tv Kf W64) = V_f64 0w`
 
 val val2w_def = Define `
   val2w v = case v of
     | V_i32 w => w2w w
     | V_i64 w => w2w w
-    | V_f32 f => w2w (float_to_fp32 f)
-    | V_f64 f => w2w (float_to_fp64 f)`
+    | V_f32 w => w2w w
+    | V_f64 w => w2w w`
 
 val w2val_def = Define `
   w2val t = case t of
-    | Tv Ki W32 => V_i32                 o w2w
-    | Tv Ki W64 => V_i64                 o w2w
-    | Tv Kf W32 => V_f32 o fp32_to_float o w2w
-    | Tv Kf W64 => V_f64 o fp64_to_float o w2w`
+    | Tv Ki W32 => V_i32 o w2w
+    | Tv Ki W64 => V_i64 o w2w
+    | Tv Kf W32 => V_f32 o w2w
+    | Tv Kf W64 => V_f64 o w2w`
 
 val wasm_width_def = Define `wasm_width a = if dimword(a) <= dimword(:32) then W32 else W64`
 
