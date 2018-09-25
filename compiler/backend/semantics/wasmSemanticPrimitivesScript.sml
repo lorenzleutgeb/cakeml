@@ -109,7 +109,7 @@ val _ = temp_type_abbrev("funcelem", ``:(funcaddr option)``)
 val _ = Datatype `tableinst = <| elem: funcelem list; max: u32 option |>`
 
 (* 4.2.8  Memory Instances *)
-val _ = Datatype `meminst = <| data: byte vec; max: u32 option |>`
+val _ = Datatype `meminst = <| data: byte list; max: u32 option |>`
 val _ = Define `page_size = 65536n`
 val _ = Define `bytes_to_pages x = x DIV page_size`
 
@@ -146,8 +146,8 @@ val _ = Datatype `
 
     | Invoke funcaddr
 
-    | Init_elem tableaddr u32 (funcidx list)
-    | Init_data   memaddr u32 (   byte list)
+    | Init_elem tableaddr u32 (word32 list)
+    | Init_data   memaddr u32 (word8  list)
 
     | Label num (instr list) ((val list) # (ainstr list))
     | Frame num frame        ((val list) # (ainstr list))
