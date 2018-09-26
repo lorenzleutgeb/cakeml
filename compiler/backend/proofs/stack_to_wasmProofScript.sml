@@ -27,7 +27,7 @@ val compile_to_module_valid = Q.store_thm("compile_to_module_valid",
        (* Imports should be the correct number of functions with an FFI-like signature. *)
        (stub_ffi_types prog)
        (* Memory should be exported. TODO: Should we also check its type (=size)? *)
-       [Te_mem mt; Te_func (main_type (wasm_width (:'a)))]
+       [Te_mem mt; Te_func (main_type W64 (* (wasm_width (:'a)) *))]
      )
  )
 `,

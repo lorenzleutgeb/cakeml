@@ -138,7 +138,7 @@ val compile_cmp_def = Define `
 val compile_inst_def = Define `
   compile_inst (asm_conf: 'a asm$asm_config) (x: 'a inst) =
     let
-      width = wasm_width (:'a);
+      width = W64 (* wasm_width (:'a) *);
       rt = Tv Ki width;
       vzro = V_i64 0w (* (w2val rt (0w:'a word)) *);
       vone = V_i64 1w (* (w2val rt (1w:'a word)) *);
@@ -310,7 +310,7 @@ val lab2reg_def = Define `lab2reg i l1 l2 = [(wasmLang$Const (V_i64 (word_or (wo
  * slightly, annoying. Maybe there's a nicer way. *)
 local val compile_section_quotation = `
   compile_section (asm_conf: 'a asm$asm_config) (ffis: string |-> word32) (p:'a stackLang$prog) n m =
-    let width = wasm_width (:'a) in
+    let width = W64 (* wasm_width (:'a) *) in
     if width <> W64 then ([Unreachable], T, 0) else
     dtcase p of
     | Tick => ([Nop], F, m)
@@ -416,7 +416,7 @@ val create_memory_def = Define `
  * the startup code of export implementations for other target architectures. *)
 val asm_to_globals_def = Define `
   asm_to_globals conf (asm_conf: 'a asm$asm_config) =
-    let width = wasm_width (:'a) in
+    let width = W64 (* wasm_width (:'a) *) in
     if width <> W64 then [] else
     let reg_t = Tv Ki width in
     let heap_sz = conf.heap_sz * 1024n * 1024n in
@@ -457,7 +457,7 @@ val wrap_main_def = Define `
   wrap_main b conf (asm_conf:'a asm$asm_config) (ffis: string |-> word32) (bitmaps:(('a word) list)) =
     let (mem, data) = create_memory conf bitmaps in
     let ffi_names = (MAP FST (fmap_to_alist ffis)) in (
-    <| types  := [main_type (wasm_width (:'a)); ffi_type]
+    <| types  := [main_type W64 (* (wasm_width (:'a)) *); ffi_type]
      ; funcs  := [<| type := 0w; locals := []; body := Expr b |>]
      ; tables := []
      ; mems   := [mem]
