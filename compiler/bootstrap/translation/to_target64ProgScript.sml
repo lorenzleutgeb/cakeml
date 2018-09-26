@@ -341,10 +341,16 @@ open stack_to_wasmTheory
 val _ = translate (wasmLangTheory.wasm_width_def |> spec64 |> SIMP_RULE (std_ss) [to_word64ProgTheory.lem, boolTheory.ITSELF_UNIQUE])
 
 val _ = translate (wrap_main_def |> spec64)
+val _ = translate (flatten_def |> spec64)
+val _ = translate (compile_inst_def |> spec64)
+val _ = translate (compile_section_def |> spec64)
+val _ = translate (create_memory_def |> spec64)
+val _ = translate (asm_to_globals_def |> spec64)
+val _ = translate (wrap_main_def |> spec64)
 val _ = translate (compile_to_module_def |> spec64)
 val _ = translate (compile_without_encoding_def |> spec64)
-val _ = translate (comply_def |> spec64)
-val _ = translate (compile_def |> spec64)
+val _ = translate (comply_def)
+val _ = translate (compile_def)
 
 open lab_filterTheory lab_to_targetTheory asmTheory
 
