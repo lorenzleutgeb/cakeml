@@ -337,6 +337,9 @@ val _ = translate (compile_def |> spec64)
 
 open stack_to_wasmTheory
 
+(* Simplify: wasm_width = W64 *)
+val _ = translate (wasmLangTheory.wasm_width_def |> spec64 |> SIMP_RULE (std_ss) [to_word64ProgTheory.lem, boolTheory.ITSELF_UNIQUE])
+
 val _ = translate (wrap_main_def |> spec64)
 val _ = translate (compile_to_module_def |> spec64)
 val _ = translate (compile_without_encoding_def |> spec64)

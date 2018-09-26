@@ -168,7 +168,7 @@ val zero_def = Define `
     | Tv Kf W32 => V_f32 0w
     | Tv Kf W64 => V_f64 0w`
 
-val wasm_width_def = Define `wasm_width a = if dimword(a) <= dimword(:32) then W32 else W64`
+val wasm_width_def = Define `wasm_width a = if dimindex(a) <= 32 then W32 else W64`
 
 (* 2.3.1.1  Conventions *)
 val bit_width_def = Define `bit_width (Tv k W32) = 32n /\ bit_width (Tv k W64) = 64n`
