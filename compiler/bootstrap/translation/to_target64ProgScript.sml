@@ -337,8 +337,10 @@ val _ = translate (compile_def |> spec64)
 
 open stack_to_wasmTheory
 
+val lem = Q.prove(`dimindex(:64) = 64 ∧ dimindex(:32) = 32`, EVAL_TAC)
+
 (* Simplify: wasm_width = W64 *)
-val _ = translate (wasmLangTheory.wasm_width_def |> spec64 |> SIMP_RULE (std_ss) [to_word64ProgTheory.lem, boolTheory.ITSELF_UNIQUE])
+val _ = translate (wasmLangTheory.wasm_width_def |> spec64 |> SIMP_RULE (std_ss) [lem, boolTheory.ITSELF_UNIQUE])
 
 val _ = translate (wrap_main_def |> spec64)
 val _ = translate (flatten_def |> spec64)
