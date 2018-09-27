@@ -338,16 +338,11 @@ val _ = translate (compile_def |> spec64)
 
 open stack_to_wasmTheory
 
-val _ = translate (listTheory.SET_TO_LIST_primitive_def |> INST_TYPE [alpha |-> ``:string``])
-val _ = translate (listTheory.LIST_TO_SET |> INST_TYPE [alpha |-> ``:string``, beta |-> ``:string``])
-
 val simp_dimindex = Q.prove(`dimindex (:64) = 64 ∧ dimindex (:32) = 32`, EVAL_TAC)
 
 (* |- wasm_width (:64) = W64 : thm *)
 val simp_wasm_width = wasmLangTheory.wasm_width_def |> spec64 |> SIMP_RULE std_ss [simp_dimindex, boolTheory.ITSELF_UNIQUE]
 
-val _ = translate (flatten_def |> spec64)
-val _ = translate (uniq_def |> INST_TYPE [alpha |-> ``:string``])
 val _ = translate (foldl_prog_def |> INST_TYPE [alpha |-> ``:(string list)``, beta |-> ``:64``])
 val _ = translate (extract_ffi_names_def |> spec64)
 val _ = translate (global_for_reg_count_def |> spec64)
@@ -380,6 +375,7 @@ val _ = translate (ws2bs_def |> spec64)
 val _ = translate (create_memory_def |> spec64 |> SIMP_RULE std_ss [simp_dimindex])
 val _ = translate (asm_to_globals_def |> spec64 |> SIMP_RULE std_ss [simp_wasm_width])
 val _ = translate (wrap_main_def |> spec64 |> SIMP_RULE std_ss [simp_wasm_width])
+val _ = translate (flatten_def |> spec64)
 val _ = translate (compile_to_module_def |> spec64)
 val _ = translate (compile_without_encoding_def |> spec64)
 val _ = translate (comply_def |> INST_TYPE [alpha |->``:(word8 list)``, beta |-> ``:word64``, gamma |-> ``:(string list)``])

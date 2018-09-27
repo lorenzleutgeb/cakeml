@@ -54,9 +54,6 @@ val compile_shift_def = Define `
     | Ror => Rotr
 `
 
-val flatten_def = Define `flatten (sections:((num, ('a stackLang$prog)) alist)) = FOLDR (\x acc. stackLang$Seq x acc) Tick ((MAP SND) sections)`
-val uniq_def = Define `uniq = SET_TO_LIST o LIST_TO_SET`
-
 (* Applies f to all "terminals" in p, i.e. all excluding
  * Seq, Call, If, While. *)
 val foldl_prog_def = Define `
@@ -76,11 +73,11 @@ val foldl_prog_def = Define `
 val extract_ffi_names_def = Define `
   extract_ffi_names prog = alist_to_fmap (MAPi
   (\i name. (name, (n2w i: word32)))
-  (uniq (foldl_prog (\p acc.
+  (foldl_prog (\p acc.
     case p of
-      | FFI name _ _ _ _ _ => name :: acc
-      | _                  =>         acc
-  ) [] prog)))`
+      | FFI name _ _ _ _ _ => if MEM name acc then acc else name :: acc
+      | _                  =>                                       acc
+  ) [] prog))`
 
 
 val global_for_reg_count_def = Define `global_for_reg_count asm_conf = asm_conf.reg_count - (LENGTH asm_conf.avoid_regs)`
@@ -471,6 +468,8 @@ val wrap_main_def = Define `
      ; exports:= [<| name := string_to_name "memory"; desc := Export_mem  0w|>;
                   <| name := string_to_name "main"  ; desc := Export_func (n2w (LENGTH ffi_names))|>]
      |>, ffi_names)`
+
+val flatten_def = Define `flatten (sections:((num, ('a stackLang$prog)) alist)) = FOLDR (\x acc. stackLang$Seq x acc) Tick ((MAP SND) sections)`
 
 val compile_to_module_def = Define `
   compile_to_module conf asm_conf (bitmaps:(('a word) list)) (prog:((num, ('a stackLang$prog)) alist)) =
