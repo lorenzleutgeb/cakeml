@@ -9,10 +9,10 @@ open wasm_binaryTheory
 local open stack_allocTheory stack_removeTheory stack_namesTheory
            word_to_stackTheory bvl_to_bviTheory in end
 
-(* Parts of this translation currently assume a 64bit architecture, i.e. all stackLang
+(* Parts of this translation currently assume a 64bit architecture, e.g. all stackLang
  * registers are modeled as i64 globals. It would be possible to implement this
  * dependent on the stackLang word with and switch to i32 in case the stackLang
- * word with is smaller than or equal to 32bits, but that would introduce some
+ * word with is smaller than or equal to 32bit, but that would introduce some
  * complications into the compiler that are desirable and reasonable to avoid
  * in a first implementation. *)
 
@@ -20,6 +20,7 @@ val _ = new_theory "stack_to_wasm";
 
 val _ = patternMatchesLib.ENABLE_PMATCH_CASES ()
 
+(* Memory parameters are needed since they are baked into the wasm module. *)
 val _ = Datatype `config = <| heap_sz: num; stack_sz: num |>`
 
 val flip_def = Define `
@@ -53,7 +54,6 @@ val compile_shift_def = Define `
     | Ror => Rotr
 `
 
-(* val flatten_def = Define `flatten = FLAT o (MAP SND)` *)
 val flatten_def = Define `flatten (sections:((num, ('a stackLang$prog)) alist)) = FOLDR (\x acc. stackLang$Seq x acc) Tick ((MAP SND) sections)`
 val uniq_def = Define `uniq = SET_TO_LIST o LIST_TO_SET`
 
@@ -105,6 +105,7 @@ val get_reg_imm_def = Define `
   get_reg_imm ri width = if width <> W64 then [] else case ri of
     | Reg r => get_reg r
     | Imm i => [wasmLang$Const (V_i64 (w2w i))]
+    | _     => [Unreachable]
 `
 
 val get_fp_reg_def = Define `get_fp_reg asm_conf r = [Get_global (fp_reg_to_global asm_conf r)]`
@@ -128,6 +129,7 @@ val compile_cmp_def = Define `
     | NotLess  => v ++ vi ++ [Relop_i W64 (Ge S)]
     | NotEqual => v ++ [Testop_i W64 Eqz] ++ vi ++ [Testop_i W64 Eqz; Binop_i W64 wasmLang$And;
                         Const (V_i64 1w); Binop_i W64 wasmLang$Xor]
+    | _        => [Unreachable]
 `
 
 (* Function to map basic instructions. The following does not cover all instrs,
@@ -145,7 +147,7 @@ val compile_inst_def = Define `
       get_fp_reg = get_fp_reg asm_conf;
       set_fp_reg = set_fp_reg asm_conf;
       fpop = fpop asm_conf;
-    in if width <> W64 then [] else case x of
+    in if width <> W64 then [] (* TODO *) else case x of
       | Skip =>
         [Nop]
       | asm$Const reg w =>
@@ -244,7 +246,7 @@ val compile_inst_def = Define `
                [Conversion (Extend U); Const (V_i64 32w); Binop_i W64 Shl] ++
                [Binop_i W64 Or]
         ) ++ [Conversion (Reinterpret T_i64)] ++ (set_fp_reg d)
-      | FP (FPToInt d1 d2) => []
+      | FP (FPToInt d1 d2) => [] (* TODO *)
       | FP (FPFromInt d1 d2) =>
         (get_fp_reg d2) ++ [
           (* Convert to i64 so we can do bitwise operations. *)
