@@ -75,7 +75,7 @@ val foldl_prog_def = Define `
 
 val extract_ffi_names_def = Define `
   extract_ffi_names prog = alist_to_fmap (MAPi
-  (\i name. (name, n2w_itself (i, (:32))))
+  (\i name. (name, (n2w i: word32)))
   (uniq (foldl_prog (\p acc.
     case p of
       | FFI name _ _ _ _ _ => name :: acc
@@ -404,10 +404,10 @@ fit_pages n = if n < page_size then 1n else 1n + fit_pages (n - page_size)`
 val create_memory_def = Define `
   create_memory conf (bitmaps: ('a word) list) =
     let heapnstack = mebibytes_to_pages (conf.heap_sz + conf.stack_sz) in
-    let pages = fit_pages ((LENGTH bitmaps) * dimword (:'a)) in
-    let size = n2w_itself (pages, (:32)) in
+    let pages = fit_pages ((LENGTH bitmaps) * ((dimindex (:'a)) DIV 8)) in
+    let size = n2w pages: word32 in
     let mem = <| type := limits_exact size |> in
-    let offset = n2w_itself (heapnstack * page_size, (:32)) in
+    let offset = n2w (heapnstack * page_size): word32 in
     let bitmap_mark = <| data := 0w ; offset := Expr [Const (V_i32     0w)]; init := ws2bs [0w:word32; offset] |> in
     let bitmap_data = <| data := 0w ; offset := Expr [Const (V_i32 offset)]; init := ws2bs bitmaps |> in
     (mem, [bitmap_mark; bitmap_data])`
@@ -433,9 +433,9 @@ val asm_to_globals_def = Define `
       (* First heap address. *)
       global_zero T_var reg_t;
       (* First stack address. *)
-      <| type := T_global T_var reg_t; init := Expr [wasmLang$Const (V_i64 (n2w_itself (cake_stack, (:64))))] |>;
+      <| type := T_global T_var reg_t; init := Expr [wasmLang$Const (V_i64 (n2w cake_stack))] |>;
       (* First address after the stack. *)
-      <| type := T_global T_var reg_t; init := Expr [wasmLang$Const (V_i64 (n2w_itself (cake_end, (:64))))] |>;
+      <| type := T_global T_var reg_t; init := Expr [wasmLang$Const (V_i64 (n2w cake_end))] |>;
     ] ++
     (* All other ordinary registers. *)
     (GENLIST (\x. global_zero T_var reg_t) (asm_conf.reg_count - (LENGTH asm_conf.avoid_regs) - 4n)) ++

@@ -204,7 +204,7 @@ val res = translate
 val _ = ml_translatorLib.ml_prog_update (ml_progLib.close_module NONE);
 
 (* wasm *)
-val res = translate export_wasmTheory.wasm_export_def;
+val res = translate (export_wasmTheory.wasm_export_def |> INST_TYPE [alpha|->``:(string list)``, beta |-> ``:num``, gamma |-> ``:num``]);
 
 (* Rest of the translation *)
 val res = translate (extend_conf_def |> spec64 |> SIMP_RULE (srw_ss()) [MEMBER_INTRO]);

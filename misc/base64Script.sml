@@ -11,6 +11,8 @@ val upper_def = Define `upper = GENLIST (CHR o ($+ 65n)) 26n`
 val lower_def = Define `lower = GENLIST (CHR o ($+ 97n)) 26n`
 val digit_def = Define `digit = GENLIST (CHR o ($+ 48n)) 10n`
 
+val _ = temp_type_abbrev ("byte", ``:(8 word)``)
+
 val _ = Datatype `
   alphabet_name =
     | Base64    (* RFC4648, Section 4 *)
@@ -70,11 +72,11 @@ val alph_16_def = Define `
 val alph_default_def = Define `alph_default = alph_64`
 
 val group_def = Define `
-  group data m pad = REVERSE (n2l m ((l2n 256 (REVERSE (MAP w2n data))) * (2 EXP pad)))`
+  group (data: byte list) m pad = REVERSE (n2l m ((l2n 256 (REVERSE (MAP w2n data))) * (2 EXP pad)))`
 
 val encode_alph_def = Define `
   (encode_alph alph [] = []) /\
-  (encode_alph alph (data:((8 word) list)) =
+  (encode_alph alph (data: byte list) =
     let (pad, adj) = alph.pad (LENGTH data) in
     let indices = group data (LENGTH alph.code) adj in
       (MAP (\x. EL x alph.code) indices) ++ pad ++ " " ++ (num_to_dec_string adj)

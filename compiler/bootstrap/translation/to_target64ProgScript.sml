@@ -51,6 +51,7 @@ val _ = (find_def_for_const := def_of_const);
 val _ = use_long_names:=true;
 
 val spec64 = INST_TYPE[alpha|->``:64``]
+val spec32 = INST_TYPE[alpha|->``:32``]
 
 val conv64 = GEN_ALL o CONV_RULE (wordsLib.WORD_CONV) o spec64 o SPEC_ALL
 
@@ -337,22 +338,49 @@ val _ = translate (compile_def |> spec64)
 
 open stack_to_wasmTheory
 
-val lem = Q.prove(`dimindex(:64) = 64 ∧ dimindex(:32) = 32`, EVAL_TAC)
+val simp_dimindex = Q.prove(`dimindex (:64) = 64 ∧ dimindex (:32) = 32`, EVAL_TAC)
 
-(* Simplify: wasm_width = W64 *)
-val _ = translate (wasmLangTheory.wasm_width_def |> spec64 |> SIMP_RULE std_ss [lem, boolTheory.ITSELF_UNIQUE])
+(* |- wasm_width (:64) = W64 : thm *)
+val simp_wasm_width = wasmLangTheory.wasm_width_def |> spec64 |> SIMP_RULE std_ss [simp_dimindex, boolTheory.ITSELF_UNIQUE]
 
-val _ = translate (wrap_main_def |> spec64)
 val _ = translate (flatten_def |> spec64)
-val _ = translate (compile_inst_def |> spec64 |> SIMP_RULE std_ss [])
-val _ = translate (compile_section_def |> spec64)
-val _ = translate (create_memory_def |> spec64)
-val _ = translate (asm_to_globals_def |> spec64)
-val _ = translate (wrap_main_def |> spec64)
+val _ = translate (uniq_def |> INST_TYPE [alpha |-> ``:string``])
+val _ = translate (foldl_prog_def |> INST_TYPE [alpha |-> ``:(string list)``, beta |-> ``:64``])
+val _ = translate (extract_ffi_names_def |> spec64)
+val _ = translate (global_for_reg_count_def |> spec64)
+val _ = translate (global_for_fp_reg_count_def |> spec64)
+val _ = translate (global_for_program_count_def |> spec64)
+val _ = translate (reg_to_global_def |> spec32)
+val _ = translate (fp_reg_to_global_def |> INST_TYPE [alpha |-> ``:32``, beta |-> ``:64``])
+val _ = translate (set_lab_def |> spec64)
+val _ = translate (set_lab_def |> spec64)
+val _ = translate (get_seg_def |> spec64)
+val _ = translate (get_seg_def |> spec64)
+val _ = translate (get_reg_imm_def |> spec64)
+val _ = translate (get_fp_reg_def |> spec64)
+val _ = translate (set_fp_reg_def |> spec64)
+val _ = translate (fpop_def |> spec64)
+val _ = translate (compile_cmp_def |> spec64)
+val _ = translate (compile_inst_def |> spec64 |> SIMP_RULE std_ss [simp_wasm_width])
+val _ = translate (jmp_indirect_def |> spec64)
+val _ = translate (jmp_def |> spec64)
+val _ = translate (jmp_if_def |> INST_TYPE [alpha |-> ``:64``, beta |-> ``:64``])
+val _ = translate (compile_jump_def |> spec64)
+val _ = translate (simple_if_def |> INST_TYPE [alpha |->``:bool``, beta |-> ``:64``, gamma |-> ``:64``])
+val _ = translate (splitall_def |> INST_TYPE [alpha |-> ``:wasmLang$instr``])
+val _ = translate (compile_section_def |> spec64 |> SIMP_RULE std_ss [simp_wasm_width])
+val _ = translate (section_to_block_def |> spec64)
+val _ = translate (w2bs_def |> spec32)
+val _ = translate (w2bs_def |> spec64)
+val _ = translate (ws2bs_def |> spec32)
+val _ = translate (ws2bs_def |> spec64)
+val _ = translate (create_memory_def |> spec64 |> SIMP_RULE std_ss [simp_dimindex])
+val _ = translate (asm_to_globals_def |> spec64 |> SIMP_RULE std_ss [simp_wasm_width])
+val _ = translate (wrap_main_def |> spec64 |> SIMP_RULE std_ss [simp_wasm_width])
 val _ = translate (compile_to_module_def |> spec64)
 val _ = translate (compile_without_encoding_def |> spec64)
-val _ = translate (comply_def)
-val _ = translate (compile_def)
+val _ = translate (comply_def |> INST_TYPE [alpha |->``:(word8 list)``, beta |-> ``:word64``, gamma |-> ``:(string list)``])
+val _ = translate (compile_def |> INST_TYPE [alpha |->``:word64``, beta |-> ``:64``])
 
 open lab_filterTheory lab_to_targetTheory asmTheory
 
