@@ -338,6 +338,9 @@ val _ = translate (compile_def |> spec64)
 
 open stack_to_wasmTheory
 
+val _ = translate (listTheory.SET_TO_LIST_primitive_def |> INST_TYPE [alpha |-> ``:string``])
+val _ = translate (listTheory.LIST_TO_SET |> INST_TYPE [alpha |-> ``:string``, beta |-> ``:string``])
+
 val simp_dimindex = Q.prove(`dimindex (:64) = 64 ∧ dimindex (:32) = 32`, EVAL_TAC)
 
 (* |- wasm_width (:64) = W64 : thm *)
