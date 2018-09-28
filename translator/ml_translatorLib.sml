@@ -4038,7 +4038,51 @@ fun abs_translate_options options def =
 val abs_translate = abs_translate_options [];
 val abs_translate_no_ind = abs_translate_options [NoInd];
 
-val _ = set_translator translate;
+fun translate_check_failed tm =
+    let
+        val _ = print "\n\nTranslation check for term\n\n"
+        val _ = print_term tm
+        val _ = print "\n\nof type\n\n"
+        val _ = print_type (type_of tm)
+        val _ = print "\n\nfailed!"
+    in
+        ()
+    end
+
+fun translate_check_tm tm =
+    case HolKernel.dest_term tm of
+        VAR _ =>
+        raise UNCHANGED
+      | CONST {Name, Thy, Ty} =>
+        if (Thy = "bool" andalso Name = "ARB") orelse
+           (Thy = "pred_set" andalso Name = "CHOICE") then
+            let
+                val _ = translate_check_failed tm
+            in
+            raise UNCHANGED
+        else
+            let
+                val _ = match_type ``:('a itself)`` Ty
+                val _ = translate_check_failed tm
+            in
+                raise UNCHANGED
+            end
+            handle HOL_ERR _ => raise UNCHANGED
+      | _ => raise UNCHANGED
+
+fun translate_check thm = CONV_RULE (DEPTH_CONV translate_check_tm) thm
+
+val flag = "CAKEML_TRANSLATOR_CHECK";
+val _ = set_translator
+  (case OS.Process.getEnv(flag) of
+      SOME "T" =>
+      let
+        val _ = print ("\nWARNING: " ^ flag ^ " is enabled. Running checks only, not actually translating!\n\n")
+      in
+        translate_check
+    | _ =>
+        translate
+  );
 
 (* TODO: make desired a more efficient datastructure *)
 fun get_desired_v_thms desired [] acc = acc
