@@ -260,34 +260,6 @@ val compile_inst_def = Define `
      | _ => []
 `
 
-val jmp_indirect_def = Define `
-  jmp_indirect asm_conf n m r w =
-    (get_reg r) ++ (
-      if w = W32
-      then [Conversion Wrap]
-      else [Const (V_i32 0xFFFFw); Binop_i W32 And]
-    ) ++ (set_lab asm_conf) ++
-    (get_reg r) ++ (
-        if w = W32
-        then [Const (V_i32 16w); Binop_i W32 (Shr U)]
-        else [wasmLang$Const (V_i64 32w); Binop_i W64 (Shr U); Conversion Wrap]
-    ) ++ (set_seg asm_conf) ++
-    continue n m
-`
-
-val jmp_def = Define `
-  jmp asm_conf n m n' m' =
-    [wasmLang$Const (V_i32 (n2w n'))] ++ (set_seg asm_conf) ++
-    [wasmLang$Const (V_i32 (n2w m'))] ++ (set_lab asm_conf) ++
-    (continue n m)
-`
-
-val jmp_if_def = Define `jmp_if asm_conf n m c r ri n' m' = ((compile_cmp c r ri) ++ [wasmLang$If [] (jmp asm_conf n m n' m') []])`
-
-val compile_jump_def = Define `
-(compile_jump asm_conf n' m' (INL n) w = jmp          asm_conf n' m' n 0) /\
-(compile_jump asm_conf n' m' (INR r) w = jmp_indirect asm_conf n' m' r w)`;
-
 val switch_def = Define `
   switch v bs = FOLDR
     (\x acc. Block [] acc::x)
@@ -333,16 +305,18 @@ local val compile_section_quotation = `
           ((jmp_if asm_conf n m c r ri n  m     )        ++ l2 ++
            (jmp    asm_conf n m        n (m + 1)) ++ lab ++ l1 ++ lab, F, m + 2)
 
-    | While c r ri p =>
+    | While c r ri p => (* TODO: Translate to wasm's loop *)
       let (l, _, m) = compile_section asm_conf ffis p n m in
           (lab ++ (jmp_if asm_conf n m (flip c) r ri n (m + 1)) ++ l
                ++ (jmp    asm_conf n m               n  m     ) ++ lab, F, m + 2)
 
-    | Raise  r   => (jmp_indirect asm_conf n m r width, T, m)
-    | Return r _ => (jmp_indirect asm_conf n m r width, T, m)
+    | Raise  r   => (jmp_indirect asm_conf n m r width, T, m) (* TODO: How to deal with exceptions? Multiple returns? *)
+    | Return r _ => (jmp_indirect asm_conf n m r width, T, m) (* TODO: Use wasm's return *)
     | JumpLower r1 r2 target => (jmp_if asm_conf n m Lower r1 ((Reg r2):'a reg_imm) target 0, F, m)
 
+    (* TODO: Use wasm return_call *)
     | stackLang$Call  NONE                          dest _  => (compile_jump asm_conf n m dest width, T, m)
+    (* TODO: Use wasm call *)
     | stackLang$Call (SOME (rhp, rhlr, rhl1, rhl2)) dest eh =>
       let (rhi, nr1, m) = compile_section asm_conf ffis rhp n m ;
           prefix = (lab2reg rhlr rhl1 rhl2) ++ (compile_jump asm_conf n m dest width) ++ lab ++ rhi in
