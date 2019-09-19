@@ -16,8 +16,7 @@ val _ = Datatype`PCstate0 = <| fixities : string |-> num option ;
 (* recording a fixity of NONE is what you have to do to represent an
    explicit nonfix declaration *)
 
-val _ = temp_type_abbrev
-            ("M", ``:PCstate0 list -> ('a # PCstate0 list) option``)
+Type M = ``:PCstate0 list -> ('a # PCstate0 list) option``
 
 val empty_PCstate0 = Define`
   empty_PCstate0 = <| fixities := FEMPTY ; ctr_arities := FEMPTY |>
@@ -89,7 +88,8 @@ val mpop_namedscope_def = Define`
    ---------------------------------------------------------------------- *)
 
 val _ = option_monadsyntax.temp_add_option_monadsyntax();
-val _ = temp_overload_on ("lift", ``option$OPTION_MAP``)
+
+Overload lift[local] = ``option$OPTION_MAP``
 
 val ifM_def = Define`
   ifM bM tM eM =
@@ -105,7 +105,8 @@ val mk_binop_def = Define`
     else App Opapp [App Opapp [Var a_op; a1]; a2]
 `
 
-val _ = temp_overload_on ("'", ``λf a. OPTION_BIND a f``);
+Overload "'"[local] = ``λf a. OPTION_BIND a f``
+
 val tokcheck_def = Define`
   tokcheck pt tok <=> (destTOK ' (destLf pt) = SOME tok)
 `;
@@ -121,10 +122,6 @@ val ptree_UQTyop_def = Define`
             lf <- destLf pt;
             tk <- destTOK lf;
             destSymbolT tk ++ destAlphaT tk
-          od ++
-          do
-            assert (tokcheck pt RefT) ;
-            return "ref"
           od
         | _ => NONE
 `;
@@ -353,13 +350,16 @@ val detuplify_def = Define`
   detuplify ty = [ty]
 `
 
-val detuplify_pmatch = Q.store_thm("detuplify_pmatch",`!ty.
+Theorem detuplify_pmatch:
+  !ty.
   detuplify ty =
   case ty of
     Attup args => args
-  | ty => [ty]`,
+  | ty => [ty]
+Proof
   ho_match_mp_tac (theorem "detuplify_ind")
-  >> fs[detuplify_def]);
+  >> fs[detuplify_def]
+QED
 
 val ptree_PTbase_def = Define‘
   ptree_PTbase ast =
@@ -414,14 +414,9 @@ val ptree_Dconstructor_def = Define`
                                  args <- ptree_TbaseList blist ;
                                  return args
                                od
-                             | [oft; ty_pt] =>
-                               if tokcheck oft OfT then
-                                 OPTION_MAP detuplify (ptree_Type nType ty_pt)
-                               else NONE
                              | _ => NONE;
                  SOME(cname, types)
               od
-            | _ :: t => NONE
         else NONE
 `;
 
@@ -592,7 +587,6 @@ val ptree_OpID_def = Define`
                  (return (Con (SOME (Short "*")) []))
                  (return (Var (Short "*")))
            else if tk = EqualsT then return (Var (Short "="))
-           else if tk = RefT then return (Var (Short "ref"))
            else NONE)
         | _ => NONE
 `;
@@ -604,8 +598,8 @@ val Papply_def = Define`
     | _ => pat
 `;
 
-val maybe_handleRef_def = Define‘
-  maybe_handleRef (Pcon (SOME (Short "ref")) [pat]) = Pref pat ∧
+val maybe_handleRef_def = PmatchHeuristics.with_classic_heuristic Define‘
+  maybe_handleRef (Pcon (SOME (Short "Ref")) [pat]) = Pref pat ∧
   maybe_handleRef p = p
 ’;
 
@@ -632,7 +626,7 @@ val ptree_Pattern_def = Define`
           do assert(tokcheck vic UnderbarT) ; return Pany od
         | [lb; rb] =>
           if tokcheckl args [LbrackT; RbrackT] then
-            SOME(Pcon (SOME (Short "nil")) [])
+            SOME(Pcon (SOME (Short "[]")) [])
           else if tokcheckl [lb] [OpT] then
             do e <- ptree_OpID rb ; EtoPat e od
           else NONE
@@ -641,7 +635,7 @@ val ptree_Pattern_def = Define`
             assert (tokcheckl [lb;rb] [LbrackT; RbrackT]);
             plist <- ptree_Plist plistpt;
             SOME (FOLDR (λp a. Pcon (SOME (Short "::")) [p; a])
-                        (Pcon (SOME (Short "nil")) [])
+                        (Pcon (SOME (Short "[]")) [])
                         plist)
           od
         | _ => NONE
@@ -651,10 +645,6 @@ val ptree_Pattern_def = Define`
         do
           cname <- ptree_ConstructorName cn ;
           return (Pcon (SOME cname) [])
-        od ++
-        do
-          assert (tokcheck cn RefT) ;
-          return (Pcon (SOME (Short "ref")) [])
         od
       | [capp_pt; base_pt] =>
         do
@@ -791,14 +781,16 @@ val mkAst_App_def = Define`
     in
       dest_Conk a10
         (λnm_opt args.
-          let (a2', loc2) = strip_loc_expr a2
-          in optLannot (merge_locsopt loc1 loc2) (Con nm_opt (args ++ [a2'])))
+          if nm_opt = SOME (Short "Ref") ∧ NULL args then App Opref [a2]
+          else
+            let (a2', loc2) = strip_loc_expr a2
+            in
+              optLannot (merge_locsopt loc1 loc2) (Con nm_opt (args ++ [a2'])))
         (dtcase a10 of
            App opn args =>
              (dtcase (destFFIop opn) of
                 NONE => App Opapp [a1;a2]
               | SOME s => App opn (args ++ [a2]))
-         | Var (Short "ref") => App Opref [a2]
          | _ => App Opapp [a1;a2])
 `;
 
@@ -858,7 +850,7 @@ local
               assert(tokcheckl [lpart;rpart][LbrackT; RbrackT]);
               elist <- ptree_Exprlist nElist1 pt;
               SOME(FOLDR (λe acc. Con (SOME (Short "::")) [e; acc])
-                         (Con (SOME (Short "nil")) [])
+                         (Con (SOME (Short "[]")) [])
                          elist)
             od
           | [single] =>
@@ -870,12 +862,11 @@ local
               do cname <- ptree_ConstructorName single;
                  SOME (Con (SOME cname) [])
               od ++
-              ptree_Expr nEtuple single ++
-              do assert (tokcheck single RefT) ; return (Var (Short "ref")) od
+              ptree_Expr nEtuple single
           | [lp;rp] => if tokcheckl [lp;rp][LparT;RparT] then
                          SOME (Con NONE [])
                        else if tokcheckl [lp;rp] [LbrackT; RbrackT] then
-                         SOME (Con (SOME (Short "nil")) [])
+                         SOME (Con (SOME (Short "[]")) [])
                        else if tokcheck lp OpT then
                          ptree_OpID rp
                        else
@@ -1124,7 +1115,7 @@ local
                 ps <- ptree_PbaseList1 pats_pt;
                 p1 <- oHD ps;
                 body0 <- ptree_Expr nE body_pt;
-                SOME(fname,dePat p1 (FOLDR mkFun body0 (misc$safeTL ps)))
+                SOME(fname,dePat p1 (FOLDR mkFun body0 (TL ps)))
               od
             | _ => NONE
         else NONE) ∧
@@ -1233,21 +1224,23 @@ in
 
 val ptree_Expr_def = Define ptree_Expr_quotation
 (*
-val ptree_Expr_pmatch = Q.store_thm("ptree_decl_pmatch",
-  (ptree_Expr_quotation |>
+Theorem ptree_decl_pmatch:
+  ^(ptree_Expr_quotation |>
    map (fn QUOTE s => Portable.replace_string {from="dtcase",to="case"} s |> QUOTE
-       | aq => aq)),
+       | aq => aq))
+Proof
   rpt strip_tac
   >> TRY(CONV_TAC patternMatchesLib.PMATCH_LIFT_BOOL_CONV)
   >> rpt strip_tac
   >> fs[Once ptree_Expr_def] >> every_case_tac >> fs[]
   >> TRY(CONV_TAC patternMatchesLib.PMATCH_LIFT_BOOL_CONV)
-  >> rpt strip_tac);
+  >> rpt strip_tac)
+QED
 *)
 end
 
 val ptree_Decl_def = Define`
-  ptree_Decl pt : dec option =
+  (ptree_Decl pt : dec option =
     dtcase pt of
        Lf _ => NONE
      | Nd (nt,locs) args =>
@@ -1277,10 +1270,14 @@ val ptree_Decl_def = Define`
                e <- ptree_Expr nE ept;
                SOME (Dlet (locs) pat e)
              od
-           | _ => NONE
-`
-
-val ptree_Decls_def = Define`
+           | [localtok; decls1_pt; intok; decls2_pt; endtok] =>
+             do
+               assert (tokcheckl [localtok; intok; endtok] [LocalT; InT; EndT]);
+               decls1 <- ptree_Decls decls1_pt;
+               decls2 <- ptree_Decls decls2_pt;
+               return (Dlocal decls1 decls2)
+             od
+           | _ => NONE) /\
   ptree_Decls (Lf _) = NONE ∧
   ptree_Decls (Nd (nt,_) args) =
     if nt <> mkNT nDecls then NONE

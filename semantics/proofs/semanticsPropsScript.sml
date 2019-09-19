@@ -9,12 +9,13 @@ open preamble
 
 val _ = new_theory"semanticsProps"
 
-val evaluate_prog_events_determ = Q.store_thm("evaluate_prog_events_determ",
-  `!st env k p k'.
+Theorem evaluate_prog_events_determ:
+   !st env k p k'.
    LENGTH((FST(evaluate_prog_with_clock st env k p)).io_events)
    = LENGTH((FST(evaluate_prog_with_clock st env k' p)).io_events) ==>
    (FST(evaluate_prog_with_clock st env k p)).io_events
-    = (FST(evaluate_prog_with_clock st env k' p)).io_events`,
+    = (FST(evaluate_prog_with_clock st env k' p)).io_events
+Proof
   rpt strip_tac
   >> (Cases_on `k <= k'` >| [ALL_TAC,`k' <= k` by simp[]])
   >> fs[evaluate_prog_with_clock_def,ELIM_UNCURRY]
@@ -22,19 +23,23 @@ val evaluate_prog_events_determ = Q.store_thm("evaluate_prog_events_determ",
   >> disch_then(qspecl_then [`st`,`env`,`p`] assume_tac)
   >> fs[io_events_mono_def,evaluate_prog_with_clock_def,
         ELIM_UNCURRY]
-  >> metis_tac[IS_PREFIX_LENGTH_ANTI]);
+  >> metis_tac[IS_PREFIX_LENGTH_ANTI]
+QED
 
-val evaluate_prog_io_events_chain = Q.store_thm("evaluate_prog_io_events_chain",
-  `lprefix_chain (IMAGE (λk. fromList (FST (evaluate_prog_with_clock st env k prog)).io_events) UNIV)`,
+Theorem evaluate_prog_io_events_chain:
+   lprefix_chain (IMAGE (λk. fromList (FST (evaluate_prog_with_clock st env k prog)).io_events) UNIV)
+Proof
   qho_match_abbrev_tac`lprefix_chain (IMAGE (λk. fromList (g k)) UNIV)` >>
   ONCE_REWRITE_TAC[GSYM o_DEF] >>
   REWRITE_TAC[IMAGE_COMPOSE] >>
   match_mp_tac prefix_chain_lprefix_chain >>
   srw_tac[][prefix_chain_def,Abbr`g`,evaluate_prog_with_clock_def] >> srw_tac[][] >>
-  metis_tac[LESS_EQ_CASES,evaluate_decs_ffi_mono_clock,io_events_mono_def,FST]);
+  metis_tac[LESS_EQ_CASES,evaluate_decs_ffi_mono_clock,io_events_mono_def,FST]
+QED
 
-val semantics_prog_total = Q.store_thm("semantics_prog_total",
-  `∀s e p. ∃b. semantics_prog s e p b`,
+Theorem semantics_prog_total:
+   ∀s e p. ∃b. semantics_prog s e p b
+Proof
   srw_tac[][] >>
   Cases_on`∃k. SND(evaluate_prog_with_clock s e k p) = Rerr (Rabort Rtype_error)`
   >- metis_tac[semantics_prog_def] >> full_simp_tac(srw_ss())[] >>
@@ -61,7 +66,8 @@ val semantics_prog_total = Q.store_thm("semantics_prog_total",
     Cases_on`e'`>>simp[]>>
     Cases_on`a`>>simp[]) >>
   match_mp_tac build_lprefix_lub_thm >>
-  MATCH_ACCEPT_TAC evaluate_prog_io_events_chain);
+  MATCH_ACCEPT_TAC evaluate_prog_io_events_chain
+QED
 
 val with_clock_ffi = Q.prove(
   `(s with clock := x).ffi = s.ffi`,EVAL_TAC)
@@ -74,11 +80,12 @@ val tac1 =
 
 val tac2 = every_case_tac >> rfs[] >> first_x_assum (qspec_then `k` assume_tac) >> rfs[]
 
-val semantics_prog_deterministic = Q.store_thm("semantics_prog_deterministic",
-  `∀s e p b b'.
+Theorem semantics_prog_deterministic:
+   ∀s e p b b'.
     semantics_prog s e p b ∧
     semantics_prog s e p b' ⇒
-    b = b'`,
+    b = b'
+Proof
   rw []
   >> Cases_on `b`
   >> Cases_on `b'`
@@ -129,16 +136,19 @@ val semantics_prog_deterministic = Q.store_thm("semantics_prog_deterministic",
     >> first_x_assum drule
     >> simp []
     >> every_case_tac
-    >> fs [semanticPrimitivesTheory.state_component_equality]));
+    >> fs [semanticPrimitivesTheory.state_component_equality])
+QED
 
-val semantics_prog_Terminate_not_Fail = Q.store_thm("semantics_prog_Terminate_not_Fail",
-  `semantics_prog s e p (Terminate x y) ⇒
+Theorem semantics_prog_Terminate_not_Fail:
+   semantics_prog s e p (Terminate x y) ⇒
     ¬semantics_prog s e p Fail ∧
-    semantics_prog s e p = {Terminate x y}`,
+    semantics_prog s e p = {Terminate x y}
+Proof
   rpt strip_tac
   \\ simp[FUN_EQ_THM]
   \\ imp_res_tac semantics_prog_deterministic \\ fs[]
-  \\ metis_tac[semantics_prog_deterministic]);
+  \\ metis_tac[semantics_prog_deterministic]
+QED
 
 val state_invariant_def = Define`
   state_invariant st ⇔
@@ -152,10 +162,11 @@ val clock_lemmas = Q.prove(
    (x with clock := x.clock = x)`,
   srw_tac[][semanticPrimitivesTheory.state_component_equality])
 
-val semantics_deterministic = Q.store_thm("semantics_deterministic",
-  `state_invariant st ⇒
+Theorem semantics_deterministic:
+   state_invariant st ⇒
    semantics st prelude inp = Execute bs
-   ⇒ ∃b. bs = {b} ∧ b ≠ Fail`,
+   ⇒ ∃b. bs = {b} ∧ b ≠ Fail
+Proof
  rw [state_invariant_def, semantics_def]
  >> every_case_tac
  >> fs [can_type_prog_def]
@@ -172,7 +183,8 @@ val semantics_deterministic = Q.store_thm("semantics_deterministic",
    metis_tac []) >>
  fs [typeSoundInvariantsTheory.type_sound_invariant_def] >>
  rfs [typeSoundInvariantsTheory.consistent_ctMap_def] >>
- metis_tac []);
+ metis_tac []
+QED
 
 val extend_with_resource_limit_def = Define`
   extend_with_resource_limit behaviours =
@@ -182,32 +194,45 @@ val extend_with_resource_limit_def = Define`
   { Terminate Resource_limit_hit io_list
     | io_list | ∃ll. Diverge ll ∈ behaviours ∧ LPREFIX (fromList io_list) ll }`;
 
+Theorem extend_with_resource_limit_not_fail:
+   x ∈ extend_with_resource_limit y ∧ Fail ∉ y ⇒ x ≠ Fail
+Proof
+  rw[extend_with_resource_limit_def] \\ metis_tac[]
+QED
+
 val implements_def = Define `
   implements x y <=>
     (~(Fail IN y) ==> x SUBSET extend_with_resource_limit y)`;
 
-val implements_intro = Q.store_thm("implements_intro",
-  `(b /\ x <> Fail ==> y = x) ==> b ==> implements {y} {x}`,
+Theorem implements_intro:
+   (b /\ x <> Fail ==> y = x) ==> b ==> implements {y} {x}
+Proof
   full_simp_tac(srw_ss())[implements_def] \\ srw_tac[][] \\ full_simp_tac(srw_ss())[]
-  \\ full_simp_tac(srw_ss())[extend_with_resource_limit_def]);
+  \\ full_simp_tac(srw_ss())[extend_with_resource_limit_def]
+QED
 
-val implements_trivial_intro = Q.store_thm("implements_trivial_intro",
-  `(y = x) ==> implements {y} {x}`,
+Theorem implements_trivial_intro:
+   (y = x) ==> implements {y} {x}
+Proof
   full_simp_tac(srw_ss())[implements_def] \\ srw_tac[][] \\ full_simp_tac(srw_ss())[]
-  \\ full_simp_tac(srw_ss())[extend_with_resource_limit_def]);
+  \\ full_simp_tac(srw_ss())[extend_with_resource_limit_def]
+QED
 
-val implements_intro_ext = Q.store_thm("implements_intro_ext",
-  `(b /\ x <> Fail ==> y IN extend_with_resource_limit {x}) ==>
-    b ==> implements {y} {x}`,
+Theorem implements_intro_ext:
+   (b /\ x <> Fail ==> y IN extend_with_resource_limit {x}) ==>
+    b ==> implements {y} {x}
+Proof
   full_simp_tac(srw_ss())[implements_def] \\ srw_tac[][] \\ full_simp_tac(srw_ss())[]
-  \\ full_simp_tac(srw_ss())[extend_with_resource_limit_def]);
+  \\ full_simp_tac(srw_ss())[extend_with_resource_limit_def]
+QED
 
 val isPREFIX_IMP_LPREFIX = Q.prove(
   `!xs ys. isPREFIX xs ys ==> LPREFIX (fromList xs) (fromList ys)`,
   full_simp_tac(srw_ss())[LPREFIX_def,llistTheory.from_toList]);
 
-val implements_trans = Q.store_thm("implements_trans",
-  `implements y z ==> implements x y ==> implements x z`,
+Theorem implements_trans:
+   implements y z ==> implements x y ==> implements x z
+Proof
   full_simp_tac(srw_ss())[implements_def] \\ srw_tac[][] \\ full_simp_tac(srw_ss())[]
   \\ full_simp_tac(srw_ss())[extend_with_resource_limit_def]
   \\ Cases_on `Fail IN y` \\ full_simp_tac(srw_ss())[]
@@ -219,6 +244,7 @@ val implements_trans = Q.store_thm("implements_trans",
   \\ imp_res_tac IS_PREFIX_TRANS
   \\ imp_res_tac isPREFIX_IMP_LPREFIX
   \\ imp_res_tac LPREFIX_TRANS
-  \\ metis_tac [])
+  \\ metis_tac []
+QED
 
 val _ = export_theory()

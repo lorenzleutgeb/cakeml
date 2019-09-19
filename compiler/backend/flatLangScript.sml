@@ -1,24 +1,26 @@
-open preamble astTheory;
-open backend_commonTheory;
+(*
+  The first intermediate language flatLang. It removes modules and
+  resolves all global scoping. Each value definition gets allocated a
+  slot in a global variable store, and each type and exception gets a
+  unique global identifier. It removes andalso and orelse and
+  replaces them with if, and removes the AallocEmpty primitive op and
+  replaces it with an alloc call with 0.
+
+  The AST of flatLang differs from the source language by having two
+  variable reference forms, one to reference local bindings (still by
+  name) and one to reference global bindings (by index). At the top
+  level, modules and let recs are gone. Top-level lets and letrecs no
+  longer bind names (or have patterns). Constructor names are replaced
+  with numbers, and type and exception definitions record the arities
+  of the constructors rather than the types. Type annotations are
+  also gone.
+*)
+
+open preamble astTheory backend_commonTheory
 
 val _ = new_theory "flatLang";
 
-val _ = set_grammar_ancestry ["ast"];
-
-(* The first intermediate language flatLang. It removes modules and resolves all
- * global scoping. Each value definition gets allocated a slot in a global
- * variable store, and each type and exception gets a unique global identifier.
- * It removes andalso and orelse and replaces them with if, and removes the
- * AallocEmpty primitive op and replaces it with an alloc call with 0.
- *
- * The AST of flatLang differs from the source language by having two variable
- * reference forms, one to reference local bindings (still by name) and one to
- * reference global bindings (by index). At the top level, modules and let recs
- * are gone.  Top-level lets and letrecs no longer bind names (or have
- * patterns). Constructor names are replaced with numbers, and type and
- * exception definitions record the arities of the constructors rather than the
- * types. Type annotations are also gone.
- *)
+val _ = set_grammar_ancestry ["ast", "backend_common"];
 
 (* Copied from the semantics, but with AallocEmpty missing. GlobalVar ops have
  * been added. *)
@@ -35,6 +37,7 @@ val _ = Datatype `
   | FP_cmp fp_cmp
   | FP_uop fp_uop
   | FP_bop fp_bop
+  | FP_top fp_top
   (* Function application *)
   | Opapp
   (* Reference operations *)
@@ -60,6 +63,7 @@ val _ = Datatype `
   | Chopb opb
   (* String operations *)
   | Implode
+  | Explode
   | Strsub
   | Strlen
   | Strcat
@@ -85,9 +89,9 @@ val _ = Datatype `
   (* Get the value of the given global variable *)
   | GlobalVarLookup num`;
 
-val _ = type_abbrev ("ctor_id", ``:num``);
+Type ctor_id = ``:num``
 (* NONE represents the exception type *)
-val _ = type_abbrev ("type_id", ``:num option``);
+Type type_id = ``:num option``
 
 val _ = Datatype `
   pat =
@@ -113,17 +117,22 @@ val _ = Datatype`
 
 val exp_size_def = definition"exp_size_def";
 
-val exp6_size_APPEND = Q.store_thm("exp6_size_APPEND[simp]",
-  `flatLang$exp6_size (e ++ e2) = exp6_size e + exp6_size e2`,
-  Induct_on`e`>>simp[exp_size_def])
+Theorem exp6_size_APPEND[simp]:
+   flatLang$exp6_size (e ++ e2) = exp6_size e + exp6_size e2
+Proof
+  Induct_on`e`>>simp[exp_size_def]
+QED
 
-val exp6_size_REVERSE = Q.store_thm("exp6_size_REVERSE[simp]",
-  `flatLang$exp6_size (REVERSE es) = exp6_size es`,
-  Induct_on`es`>>simp[exp_size_def])
+Theorem exp6_size_REVERSE[simp]:
+   flatLang$exp6_size (REVERSE es) = exp6_size es
+Proof
+  Induct_on`es`>>simp[exp_size_def]
+QED
 
-val exp_size_MAP = Q.store_thm("exp_size_MAP",
-  `(!xs. exp6_size (MAP SND xs) < exp3_size xs + 1) /\
-   (!xs. exp6_size (MAP (SND o SND) xs) < exp1_size xs + 1)`,
+Theorem exp_size_MAP:
+   (!xs. exp6_size (MAP SND xs) < exp3_size xs + 1) /\
+   (!xs. exp6_size (MAP (SND o SND) xs) < exp1_size xs + 1)
+Proof
   conj_tac
   >-
    (Induct
@@ -131,12 +140,14 @@ val exp_size_MAP = Q.store_thm("exp_size_MAP",
     \\ PairCases_on `h` \\ fs [exp_size_def])
   \\ Induct
   \\ rw [exp_size_def]
-  \\ PairCases_on `h` \\ fs [exp_size_def])
+  \\ PairCases_on `h` \\ fs [exp_size_def]
+QED
 
-val exp_size_MEM = Q.store_thm("exp_size_MEM",
-  `(!xs x. MEM x xs ==> exp_size x < exp6_size xs) /\
+Theorem exp_size_MEM:
+   (!xs x. MEM x xs ==> exp_size x < exp6_size xs) /\
    (!xs x. MEM x xs ==> exp_size (SND (SND x)) < exp1_size xs) /\
-   (!xs x. MEM x xs ==> exp_size (SND x) < exp3_size xs)`,
+   (!xs x. MEM x xs ==> exp_size (SND x) < exp3_size xs)
+Proof
   conj_tac
   >-
    (Induct
@@ -148,7 +159,8 @@ val exp_size_MEM = Q.store_thm("exp_size_MEM",
   \\ rw [exp_size_def]
   \\ PairCases_on `h` \\ fs [exp_size_def]
   \\ res_tac
-  \\ decide_tac);
+  \\ decide_tac
+QED
 
 val _ = Datatype`
  dec =

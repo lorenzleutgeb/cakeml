@@ -345,7 +345,7 @@ let do_opapp vs =
 (* If a value represents a list, get that list. Otherwise return Nothing *)
 val v_to_list : v -> maybe (list v)
 let rec v_to_list (Conv (Just stamp) []) =
-  if stamp = TypeStamp "nil" list_type_num then
+  if stamp = TypeStamp "[]" list_type_num then
     Just []
   else
     Nothing
@@ -360,12 +360,12 @@ and v_to_list (Conv (Just stamp) [v1;v2]) =
 and v_to_list _ = Nothing
 
 val list_to_v : list v -> v
-let rec list_to_v [] = Conv (Just (TypeStamp "nil" list_type_num)) []
+let rec list_to_v [] = Conv (Just (TypeStamp "[]" list_type_num)) []
 and list_to_v (x::xs) = Conv (Just (TypeStamp "::" list_type_num)) [x; list_to_v xs]
 
 val v_to_char_list : v -> maybe (list char)
 let rec v_to_char_list (Conv (Just stamp) []) =
-  if stamp = TypeStamp "nil" list_type_num then
+  if stamp = TypeStamp "[]" list_type_num then
     Just []
   else
     Nothing
@@ -460,8 +460,8 @@ end
 
 val Boolv : bool -> v
 let Boolv b = if b
-  then Conv (Just (TypeStamp "true" bool_type_num)) []
-  else Conv (Just (TypeStamp "false" bool_type_num)) []
+  then Conv (Just (TypeStamp "True" bool_type_num)) []
+  else Conv (Just (TypeStamp "False" bool_type_num)) []
 
 type exp_or_val =
   | Exp of exp
@@ -488,6 +488,8 @@ let do_app ((s:store v),(t:ffi_state 'ffi)) op vs =
         Just ((s,t), Rval (Litv (Word8 (opw8_lookup op w1 w2))))
     | (Opw W64 op, [Litv (Word64 w1); Litv (Word64 w2)]) ->
         Just ((s,t), Rval (Litv (Word64 (opw64_lookup op w1 w2))))
+    | (FP_top top, [Litv (Word64 w1); Litv (Word64 w2); Litv (Word64 w3)]) ->
+        Just ((s,t), Rval (Litv (Word64 (fp_top top w1 w2 w3))))
     | (FP_bop bop, [Litv (Word64 w1); Litv (Word64 w2)]) ->
         Just ((s,t),Rval (Litv (Word64 (fp_bop bop w1 w2))))
     | (FP_uop uop, [Litv (Word64 w)]) ->
@@ -626,6 +628,12 @@ let do_app ((s:store v),(t:ffi_state 'ffi)) op vs =
           | Just ls ->
               Just ((s,t), Rval (Litv (StrLit (toString ls))))
           | Nothing -> Nothing
+          end
+    | (Explode, [v]) ->
+          match v with
+          | Litv (StrLit str) ->
+              Just ((s,t), Rval (list_to_v (List.map (fun c -> Litv (Char c)) (toCharList str))))
+          | _ -> Nothing
           end
     | (Strsub, [Litv (StrLit str); Litv (IntLit i)]) ->
         if i < 0 then

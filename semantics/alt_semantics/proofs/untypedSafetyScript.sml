@@ -1,6 +1,8 @@
-(* Prove that the small step semantics never gets stuck if there is still work
- * to do (i.e., it must detect all type errors).  Thus, it either diverges or
- * gives a result, and it can't do both. *)
+(*
+  Prove that the small step semantics never gets stuck if there is
+  still work to do (i.e., it must detect all type errors).  Thus, it
+  either diverges or gives a result, and it can't do both.
+*)
 
 open preamble;
 open libTheory astTheory bigStepTheory smallStepTheory semanticPrimitivesTheory
@@ -58,17 +60,20 @@ val small_exp_safety2 = Q.prove (
      rw [small_eval_def] >>
      metis_tac []));
 
-val untyped_safety_exp = Q.store_thm ("untyped_safety_exp",
-`!s env e. (?r. small_eval env s e [] r) = ¬e_diverges env s e`,
-metis_tac [small_exp_safety2, small_exp_safety1]);
+Theorem untyped_safety_exp:
+ !s env e. (?r. small_eval env s e [] r) = ¬e_diverges env s e
+Proof
+metis_tac [small_exp_safety2, small_exp_safety1]
+QED
 
 val to_small_st_surj = Q.prove(
   `∀s. ∃y. s = to_small_st y`,
   srw_tac[QUANT_INST_ss[record_default_qp,std_qp]][to_small_st_def]);
 
-val untyped_safety_decs = Q.store_thm ("untyped_safety_decs",
-  `(!d (s:'a state) env. (∃r. evaluate_dec F env s d r) = ~dec_diverges env s d) ∧
-   (!ds (s:'a state) env. (?r. evaluate_decs F env s ds r) = ~decs_diverges env s ds)`,
+Theorem untyped_safety_decs:
+   (!d (s:'a state) env. (∃r. evaluate_dec F env s d r) = ~dec_diverges env s d) ∧
+   (!ds (s:'a state) env. (?r. evaluate_decs F env s ds r) = ~decs_diverges env s ds)
+Proof
  ho_match_mp_tac dec_induction >>
  rw [] >>
  rw [Once evaluate_dec_cases, Once dec_diverges_cases] >>
@@ -108,18 +113,25 @@ val untyped_safety_decs = Q.store_thm ("untyped_safety_decs",
     rw [] >>
     metis_tac [pair_CASES, result_nchotomy])
   >- (
+    fs [EXISTS_PROD, FORALL_PROD]
+    >> metis_tac [result_nchotomy, decs_determ, PAIR_EQ,
+        result_11, result_distinct]
+  )
+  >- (
     pop_assum (mp_tac o GSYM) >>
     pop_assum (mp_tac o GSYM) >>
     rw [] >>
     eq_tac >>
     rw [] >>
     metis_tac [pair_CASES, result_nchotomy, result_distinct, decs_determ,
-               PAIR_EQ, result_11]));
+               PAIR_EQ, result_11])
+QED
 
      (*
 
-val untyped_safety_top = Q.store_thm ("untyped_safety_top",
-`!s env top. (?r. evaluate_top F env s top r) = ~top_diverges env s top`,
+Theorem untyped_safety_top:
+ !s env top. (?r. evaluate_top F env s top r) = ~top_diverges env s top
+Proof
 rw [evaluate_top_cases, top_diverges_cases] >>
 eq_tac >>
 rw [] >>
@@ -127,10 +139,12 @@ rw [] >>
 CCONTR_TAC >>
 fs [] >>
 rw [] >>
-metis_tac [top_nchotomy, untyped_safety_decs, untyped_safety_dec, pair_CASES, result_nchotomy]);
+metis_tac [top_nchotomy, untyped_safety_decs, untyped_safety_dec, pair_CASES, result_nchotomy]
+QED
 
-val untyped_safety_prog = Q.store_thm ("untyped_safety_prog",
-`!s env tops. (?r. evaluate_prog F env s tops r) = ~prog_diverges env s tops`,
+Theorem untyped_safety_prog:
+ !s env tops. (?r. evaluate_prog F env s tops r) = ~prog_diverges env s tops
+Proof
  induct_on `tops` >>
  rw [] >-
  rw [Once evaluate_prog_cases, Once prog_diverges_cases] >>
@@ -151,7 +165,8 @@ val untyped_safety_prog = Q.store_thm ("untyped_safety_prog",
      `?s. (?err. r = (s,Rerr err)) ∨ (?env'. r = (s,Rval env'))` by metis_tac [pair_CASES, result_nchotomy] >>
      rw []
      >- metis_tac []
-     >- metis_tac [PAIR_EQ, result_11, pair_CASES, top_determ, top_unclocked]));
+     >- metis_tac [PAIR_EQ, result_11, pair_CASES, top_determ, top_unclocked])
+QED
      *)
 
 val _ = export_theory ();

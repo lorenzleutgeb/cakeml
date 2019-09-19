@@ -1,4 +1,3 @@
-
 (*---------------------------------------------------------------------------
            McCarthy's 91 function.
  ---------------------------------------------------------------------------*)
@@ -6,6 +5,8 @@ open bossLib Theory Parse Tactic boolLib Lib
 open TotalDefn numLib prim_recTheory arithmeticTheory;
 
 val _ = new_theory "ninetyOne"
+
+val _ = ParseExtras.temp_loose_equality()
 
 (*---------------------------------------------------------------------------
        Define the 91 function. We call it "N". We use Hol_defn to
@@ -124,13 +125,15 @@ val (N_def,N_ind) = Defn.tprove
 val _ = save_thm ("N_def", N_def);
 val _ = save_thm ("N_ind", N_ind);
 
-val N_correct = Q.store_thm ("N_correct",
-`!x. N x = if x > 100 then x - 10 else 91`,
+Theorem N_correct:
+ !x. N x = if x > 100 then x - 10 else 91
+Proof
 HO_MATCH_MP_TAC N_ind THEN
 SRW_TAC [] [] THEN
 ONCE_REWRITE_TAC [N_def] THEN
 SRW_TAC [] [] THEN
-DECIDE_TAC);
+DECIDE_TAC
+QED
 
 (*---------------------------------------------------------------------------
       Note that the above development is slightly cranky, since

@@ -1,3 +1,6 @@
+(*
+  Prove completeness of the type inferencer for the expression-level.
+*)
 open preamble;
 open libTheory typeSystemTheory astTheory semanticPrimitivesTheory terminationTheory inferTheory unifyTheory;
 open astPropsTheory;
@@ -8,42 +11,46 @@ open namespaceTheory namespacePropsTheory envRelTheory;
 val _ = new_theory "infer_eComplete";
 
 (*Useful lemmas about pure add constraints, some of these imply the others*)
-val pure_add_constraints_success = Q.store_thm("pure_add_constraints_success",
-`
-!s constraints s'.
+Theorem pure_add_constraints_success:
+ !s constraints s'.
 t_wfs s ∧
 pure_add_constraints s constraints s'
 ⇒
 s SUBMAP s' ∧
 FDOM s ⊆ FDOM s' ∧
 t_compat s s' ∧
-t_wfs s'`,
+t_wfs s'
+Proof
   ho_match_mp_tac pure_add_constraints_ind>>
   fs[pure_add_constraints_def,t_compat_refl]>>
   ntac 7 strip_tac>>
   imp_res_tac t_unify_unifier>>
   res_tac>>fs[]>>CONJ_ASM1_TAC>>
-  metis_tac[SUBMAP_DEF,SUBSET_DEF,SUBMAP_t_compat,SUBMAP_TRANS]);
+  metis_tac[SUBMAP_DEF,SUBSET_DEF,SUBMAP_t_compat,SUBMAP_TRANS]
+QED
 
 (*t_compat is preserved over certain types of pure_add_constraints*)
-val t_compat_pure_add_constraints_1 = Q.store_thm("t_compat_pure_add_constraints_1",
-`!ls s sx.
+Theorem t_compat_pure_add_constraints_1:
+ !ls s sx.
   t_compat s sx ∧ EVERY (\x,y. t_walkstar sx x = t_walkstar sx y) ls
   ⇒
-  ?si. pure_add_constraints s ls si ∧ t_compat si sx`,
+  ?si. pure_add_constraints s ls si ∧ t_compat si sx
+Proof
   Induct>>fs[pure_add_constraints_def]>>rw[]>>
   Cases_on`h`>>fs[]>>
   simp[pure_add_constraints_def]>>
   imp_res_tac t_compat_eqs_t_unify>>
-  fs[]);
+  fs[]
+QED
 
 (*If pure add constraints succeeds then the constraints all unify*)
-val t_compat_pure_add_constraints_2 = Q.store_thm("t_compat_pure_add_constraints_2",
-`!ls s sx.
+Theorem t_compat_pure_add_constraints_2:
+ !ls s sx.
   t_wfs s ∧
   pure_add_constraints s ls sx
   ⇒
-  EVERY (\x,y. t_walkstar sx x = t_walkstar sx y) ls`,
+  EVERY (\x,y. t_walkstar sx x = t_walkstar sx y) ls
+Proof
   Induct>>rw[]>>
   Cases_on`h`>>fs[pure_add_constraints_def]
   >-
@@ -55,14 +62,16 @@ val t_compat_pure_add_constraints_2 = Q.store_thm("t_compat_pure_add_constraints
       metis_tac[t_walkstar_SUBMAP]>>
     fs[])
   >>
-    metis_tac[t_unify_wfs]);
+    metis_tac[t_unify_wfs]
+QED
 
 (*behaves like a function if the first 2 arguments are equal*)
-val pure_add_constraints_functional = Q.store_thm("pure_add_constraints_functional",
-` !constraints s s' s''.
+Theorem pure_add_constraints_functional:
+  !constraints s s' s''.
    t_wfs s ∧
    pure_add_constraints s constraints s' ∧
-   pure_add_constraints s constraints s'' ⇒ s' = s''`,
+   pure_add_constraints s constraints s'' ⇒ s' = s''
+Proof
    Induct>>
    rw[]>>
    fs[pure_add_constraints_def]>>
@@ -70,7 +79,8 @@ val pure_add_constraints_functional = Q.store_thm("pure_add_constraints_function
    fs[pure_add_constraints_def]>>
    fs[t_unify_eqn]>>
    imp_res_tac t_unify_wfs>>
-   metis_tac[]);
+   metis_tac[]
+QED
 
 (*1 direction is sufficient to imply the other*)
 val pure_add_constraints_swap_lemma = Q.prove(
@@ -93,19 +103,21 @@ val pure_add_constraints_swap_lemma = Q.prove(
   rfs[]>>
   HINT_EXISTS_TAC>>fs[]);
 
-val pure_add_constraints_swap = Q.store_thm("pure_add_constraints_swap",
-`t_wfs s ∧
+Theorem pure_add_constraints_swap:
+ t_wfs s ∧
   pure_add_constraints s (a++b) sx
   ⇒
   ?si. pure_add_constraints s (b++a) si ∧
        t_compat si sx ∧
-       t_compat sx si`,
+       t_compat sx si
+Proof
   rw[]>>
   assume_tac pure_add_constraints_swap_lemma>>rfs[]>>
   HINT_EXISTS_TAC>>fs[]>>
   imp_res_tac pure_add_constraints_swap_lemma>>
   imp_res_tac pure_add_constraints_functional>>
-  fs[t_compat_trans]);
+  fs[t_compat_trans]
+QED
 
 val pure_add_constraints_swap = GEN_ALL pure_add_constraints_swap;
 
@@ -146,8 +158,8 @@ val FDOM_extend = Q.prove (
    Cases_on`x=next_uvar`>>fs[]>>
    `x<next_uvar` by DECIDE_TAC>>fs[]);
 
-val pure_add_constraints_exists = Q.store_thm ("pure_add_constraints_exists",
-`!s ts next_uvar lim.
+Theorem pure_add_constraints_exists:
+ !s ts next_uvar lim.
   t_wfs s ∧
   FDOM s = count next_uvar ∧
   EVERY (check_freevars lim []) ts
@@ -156,7 +168,8 @@ val pure_add_constraints_exists = Q.store_thm ("pure_add_constraints_exists",
   let targs = MAP unconvert_t ts in
   let constraints = ZIP ((MAP Infer_Tuvar tys),targs) in
   let extension = ZIP (tys,targs) in
-  pure_add_constraints s constraints (s|++extension)`,
+  pure_add_constraints s constraints (s|++extension)
+Proof
   induct_on`ts`>>
   srw_tac[][] >>unabbrev_all_tac>>
   srw_tac[] [COUNT_LIST_def, pure_add_constraints_def]>-rw[FUPDATE_LIST]>>
@@ -186,7 +199,8 @@ val pure_add_constraints_exists = Q.store_thm ("pure_add_constraints_exists",
     res_tac>>
     fs[FUPDATE_LIST_THM])
   >-
-    fs[check_t_def]);
+    fs[check_t_def]
+QED
 
 (*Can't find a version of this in the right direction*)
 val check_t_t_walkstar = prove
@@ -398,15 +412,17 @@ val t_unify_ignore = Q.prove(
   Cases_on`ts`>>Cases_on`ts'`>>
   fs[ts_unify_def]);
 
-val pure_add_constraints_ignore = Q.store_thm("pure_add_constraints_ignore",
-`!s ls. t_wfs s ∧ EVERY (λx,y. t_walkstar s x = t_walkstar s y) ls
-  ⇒ pure_add_constraints s ls s`,
+Theorem pure_add_constraints_ignore:
+ !s ls. t_wfs s ∧ EVERY (λx,y. t_walkstar s x = t_walkstar s y) ls
+  ⇒ pure_add_constraints s ls s
+Proof
   strip_tac>>Induct>>
   fs[pure_add_constraints_def]>>
   rw[]>>
   Cases_on`h` >>rw[pure_add_constraints_def]>>
   fs[]>>imp_res_tac t_unify_ignore>>
-  metis_tac[]);
+  metis_tac[]
+QED
 
 (*t_compat preserves all grounded (no unification variable after walk) terms*)
 val t_compat_ground = Q.prove(
@@ -441,9 +457,8 @@ val t_walkstar_tuvar_props2 = Q.prove(
   fs[]);
 
 (*Remove every uvar in the FDOM if we walkstar using a completed map*)
-val check_t_less = Q.store_thm("check_t_less",
-`
-  (!t.
+Theorem check_t_less:
+   (!t.
   t_wfs s ∧
   (!uv. uv ∈ FDOM s ⇒ check_t n {} (t_walkstar s (Infer_Tuvar uv))) ∧
   check_t 0 uvars t
@@ -454,7 +469,8 @@ val check_t_less = Q.store_thm("check_t_less",
   (!uv. uv ∈ FDOM s ⇒ check_t n {} (t_walkstar s (Infer_Tuvar uv))) ∧
   EVERY (check_t 0 uvars) ts
   ⇒
-  EVERY (check_t n (uvars ∩ (COMPL (FDOM s)))) (MAP (t_walkstar s) ts))`,
+  EVERY (check_t n (uvars ∩ (COMPL (FDOM s)))) (MAP (t_walkstar s) ts))
+Proof
   ho_match_mp_tac infer_tTheory.infer_t_induction>>
   rw[]
   >- fs[t_walkstar_eqn,t_walk_eqn,check_t_def]
@@ -466,18 +482,20 @@ val check_t_less = Q.store_thm("check_t_less",
     (res_tac>>fs[check_t_more])
   >>
     imp_res_tac t_walkstar_tuvar_props>>
-    fs[check_t_def]);
+    fs[check_t_def]
+QED
 
 (*Double sided t_compat thm*)
-val t_compat_bi_ground = Q.store_thm("t_compat_bi_ground",
-`(!uv. uv ∈ FDOM a ⇒ check_t n {} (t_walkstar a (Infer_Tuvar uv))) ∧
+Theorem t_compat_bi_ground:
+ (!uv. uv ∈ FDOM a ⇒ check_t n {} (t_walkstar a (Infer_Tuvar uv))) ∧
   t_compat a b ∧
   t_compat b a
   ⇒
   (!uv. uv ∈ FDOM b ⇒ check_t n {} (t_walkstar b (Infer_Tuvar uv))) ∧
   FDOM a = FDOM b ∧
   ((!t. t_walkstar a t= t_walkstar b t) ∧
-  (!ts. MAP (t_walkstar a) ts = MAP (t_walkstar b) ts))`,
+  (!ts. MAP (t_walkstar a) ts = MAP (t_walkstar b) ts))
+Proof
   strip_tac>>
   CONJ_ASM1_TAC
   >-
@@ -512,7 +530,8 @@ val t_compat_bi_ground = Q.store_thm("t_compat_bi_ground",
     >-
       metis_tac[t_walkstar_no_vars]
     >>
-      metis_tac[t_walkstar_tuvar_props]);
+      metis_tac[t_walkstar_tuvar_props]
+QED
 
 (*Free properties when extending the completed map with uvar->ground var*)
 val extend_one_props = Q.prove(
@@ -601,8 +620,8 @@ val submap_t_walkstar_replace = Q.prove(
   imp_res_tac t_walkstar_SUBMAP>>
   metis_tac[t_walkstar_no_vars]);
 
-val extend_multi_props = Q.store_thm("extend_multi_props",
-`!st constraints s ts n.
+Theorem extend_multi_props:
+ !st constraints s ts n.
   t_wfs st.subst ∧
   t_wfs s ∧
   pure_add_constraints st.subst constraints s ∧
@@ -622,7 +641,8 @@ val extend_multi_props = Q.store_thm("extend_multi_props",
   FDOM s' = count (st.next_uvar +LENGTH ts) ∧
   (∀n. n<LENGTH ts ⇒
   t_walkstar s' (Infer_Tuvar (st.next_uvar+n)) = EL n targs) ∧
-  ∀uv. uv ∈ FDOM s' ⇒ check_t n {} (t_walkstar s' (Infer_Tuvar uv))`,
+  ∀uv. uv ∈ FDOM s' ⇒ check_t n {} (t_walkstar s' (Infer_Tuvar uv))
+Proof
   rpt strip_tac>>
   fsrw_tac[][LET_THM]>>CONJ_ASM1_TAC>-
     (imp_res_tac pure_add_constraints_exists>>
@@ -681,7 +701,8 @@ val extend_multi_props = Q.store_thm("extend_multi_props",
         fs[EVERY_EL,EL_MAP]>>
         first_x_assum(qspec_then `uv-st.next_uvar` mp_tac)>>
         impl_tac>- DECIDE_TAC>>
-        metis_tac[check_freevars_to_check_t]);
+        metis_tac[check_freevars_to_check_t]
+QED
 
 (*Useful tactics, mainly for constrain_op*)
 
@@ -989,15 +1010,17 @@ val simp_tenv_invC_append = Q.prove(
   every_case_tac>>res_tac>>fs[]>>metis_tac[]);
 
 (*convert on both sides of eqn*)
-val convert_bi_remove = Q.store_thm("convert_bi_remove",
-`convert_t A = convert_t B ∧
+Theorem convert_bi_remove:
+ convert_t A = convert_t B ∧
   check_t n {} A ∧
   check_t m {} B
   ⇒
-  A = B`,
+  A = B
+Proof
   rw[]>>
   last_x_assum (assume_tac o (Q.AP_TERM `unconvert_t`))>>
-  metis_tac[check_t_empty_unconvert_convert_id]);
+  metis_tac[check_t_empty_unconvert_convert_id]
+QED
 
 (*Substituting every tvs away with something that has no tvs leaves none left*)
 val infer_type_subst_check_t_less = Q.prove(
@@ -1029,9 +1052,8 @@ val infer_type_subst_check_t_less = Q.prove(
     fs[EVERY_MAP]>>metis_tac[]);
 
 
-val infer_p_complete = Q.store_thm("infer_p_complete",
-`
-  (!tvs tenv p t tenvE.
+Theorem infer_p_complete:
+   (!tvs tenv p t tenvE.
   type_p tvs tenv p t tenvE
   ⇒
   !l s ienv st constraints.
@@ -1072,7 +1094,8 @@ val infer_p_complete = Q.store_thm("infer_p_complete",
     FDOM s' = count st'.next_uvar ∧
     t_compat s s' ∧
     simp_tenv_invC s' tvs new_bindings tenvE ∧
-    ts = MAP (convert_t o t_walkstar s') ts')`,
+    ts = MAP (convert_t o t_walkstar s') ts')
+Proof
   ho_match_mp_tac type_p_strongind>>
   rw[UNCURRY,success_eqns,infer_p_def]
   >-
@@ -1301,21 +1324,24 @@ val infer_p_complete = Q.store_thm("infer_p_complete",
          metis_tac[t_compat_def]>>
        rw[]>>AP_TERM_TAC>>
        fs[t_compat_def]>>
-       metis_tac[t_walkstar_no_vars]));
+       metis_tac[t_walkstar_no_vars])
+QED
 
 (*Specialize check_t_less a bit since we use this form a lot*)
-val sub_completion_completes = Q.store_thm("sub_completion_completes",
-`t_wfs s ∧
+Theorem sub_completion_completes:
+ t_wfs s ∧
   check_t 0 (count n) t ∧
   FDOM s = count n ∧
   (!uv. uv < n ⇒
     check_t tvs {} (t_walkstar s (Infer_Tuvar uv)))
   ⇒
-  check_t tvs {} (t_walkstar s t)`,
+  check_t tvs {} (t_walkstar s t)
+Proof
   assume_tac (GEN_ALL (CONJUNCT1 check_t_less))>>
   rw[]>>
   first_x_assum(qspecl_then[`count n`,`s`,`tvs`,`t`] mp_tac)>>
-  impl_tac>>fs[]);
+  impl_tac>>fs[]
+QED
 
 val lookup_var_bind_var_list = Q.prove(
 `!bindings.
@@ -1590,9 +1616,8 @@ val ienv_val_ok_more = Q.prove(`
   res_tac>>fs[]>>
   metis_tac[check_t_more4,check_t_more5]);
 
-val infer_e_complete = Q.store_thm ("infer_e_complete",
-`
- (!tenv tenvE e t.
+Theorem infer_e_complete:
+  (!tenv tenvE e t.
    type_e tenv tenvE e t
    ⇒
    !loc s ienv st constraints.
@@ -1654,7 +1679,8 @@ val infer_e_complete = Q.store_thm ("infer_e_complete",
        FDOM st'.subst ⊆ count st'.next_uvar ∧
        FDOM s' = count st'.next_uvar ∧
        t_compat s s' ∧
-       MAP SND env = MAP (convert_t o t_walkstar s') env')`,
+       MAP SND env = MAP (convert_t o t_walkstar s') env')
+Proof
   ho_match_mp_tac type_e_strongind >>
   rw [add_constraint_success,success_eqns,infer_e_def]
   (*Easy cases*)
@@ -2638,6 +2664,7 @@ val infer_e_complete = Q.store_thm ("infer_e_complete",
       imp_res_tac infer_e_check_t>>
       rfs[]>>
       imp_res_tac sub_completion_completes>>
-      AP_TERM_TAC>>metis_tac[t_walkstar_no_vars])) ;
+      AP_TERM_TAC>>metis_tac[t_walkstar_no_vars])
+QED ;
 
 val _ = export_theory ();

@@ -12,8 +12,12 @@ Pure functions for the Int module.
 [mllistScript.sml](mllistScript.sml):
 Pure functions for the List module.
 
-[mlnumScript.sml](mlnumScript.sml):
-Pure functions for the Num module.
+[mlmapScript.sml](mlmapScript.sml):
+Pure functions for the Map module.
+This file defines a wrapper around the balanced_map type. The new
+type is essentially a pair that carries the compare functions next
+to the tree so that users don't have to provide the compare function
+as an explicit argument everywhere.
 
 [mloptionScript.sml](mloptionScript.sml):
 Pure functions for the Option module.

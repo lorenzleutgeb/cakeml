@@ -1,6 +1,12 @@
+(*
+  This compiler phase reorders patterns in pattern matches to improve
+  code quality.
+*)
 open preamble flatLangTheory
 
 val _ = new_theory"flat_reorder_match";
+val _ = set_grammar_ancestry ["flatLang"];
+val _ = temp_tight_equality ();
 
 val is_const_con_def = Define`
   (is_const_con (Pcon (SOME tag) plist) = (plist = [])) /\
@@ -39,16 +45,21 @@ val const_cons_fst_def = Define`
         let (const_cons, a) = const_cons_sep pes [] []
         in const_cons ++ REVERSE a`
 
-val const_cons_sep_MEM= Q.store_thm("const_cons_sep_MEM",
-  `! y z. ¬ (MEM x y ) /\ ¬ (MEM x z) /\
-          MEM x ((\(a,b). a ++ REVERSE b) (const_cons_sep pes y z)) ==> MEM x pes`,
+Theorem const_cons_sep_MEM:
+  ! y z. ¬ (MEM x y ) /\ ¬ (MEM x z) /\
+         MEM x ((\(a,b). a ++ REVERSE b) (const_cons_sep pes y z)) ==>
+         MEM x pes
+Proof
   Induct_on `pes`
-  \\ rw [const_cons_sep_def] \\ METIS_TAC [MEM])
+  \\ rw [const_cons_sep_def] \\ METIS_TAC [MEM]
+QED
 
-val const_cons_fst_MEM = Q.store_thm("const_cons_fst_MEM",
-  `MEM x (const_cons_fst pes) ==> MEM x pes`,
+Theorem const_cons_fst_MEM:
+   MEM x (const_cons_fst pes) ==> MEM x pes
+Proof
   rw [const_cons_fst_def]
-  \\ METIS_TAC [MEM, const_cons_sep_MEM])
+  \\ METIS_TAC [MEM, const_cons_sep_MEM]
+QED
 
 (*
  example:
@@ -102,30 +113,38 @@ val compile_def = tDefine "compile" `
 
 val compile_ind = theorem"compile_ind";
 
-val compile_length = Q.store_thm ("compile_length[simp]",
-  `! es. LENGTH (compile es) = LENGTH es`,
+Theorem compile_length[simp]:
+   ! es. LENGTH (compile es) = LENGTH es
+Proof
   ho_match_mp_tac compile_ind
-  \\ rw [compile_def]);
+  \\ rw [compile_def]
+QED
 
-val compile_sing = Q.store_thm ("compile_sing",
-  `! e. ?e2. compile [e] = [e2]`,
+Theorem compile_sing:
+   ! e. ?e2. compile [e] = [e2]
+Proof
   rw []
   \\ qspec_then `[e]` mp_tac compile_length
-  \\ simp_tac(std_ss++listSimps.LIST_ss)[LENGTH_EQ_NUM_compute]);
+  \\ simp_tac(std_ss++listSimps.LIST_ss)[LENGTH_EQ_NUM_compute]
+QED
 
 val compile_nil = save_thm ("compile_nil[simp]", EVAL ``compile []``);
 
-val compile_not_nil = Q.store_thm("compile_not_nil[simp]",
-  `compile [x] <> []`,
+Theorem compile_not_nil[simp]:
+   compile [x] <> []
+Proof
   strip_tac \\ pop_assum (mp_tac o Q.AP_TERM `LENGTH`)
-  \\ fs [compile_length]);
+  \\ fs [compile_length]
+QED
 
-val compile_cons = Q.store_thm ("compile_cons",
-  `! e es. compile (e::es) = HD (compile [e]) :: (compile es)`,
+Theorem compile_cons:
+   ! e es. compile (e::es) = HD (compile [e]) :: (compile es)
+Proof
   rw []
   \\ Cases_on `es`
   \\ rw [compile_def]
-  \\ METIS_TAC [compile_sing, HD])
+  \\ METIS_TAC [compile_sing, HD]
+QED
 
 val compile_decs_def = Define `
   (compile_decs [] = []) /\

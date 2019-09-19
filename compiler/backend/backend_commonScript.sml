@@ -1,8 +1,18 @@
-open HolKernel Parse boolLib bossLib;
-open preamble fpSemTheory;
+(*
+  Definitions that are common for many parts of the compiler backend.
+*)
+
+open preamble
 
 val _ = new_theory "backend_common";
-val _ = set_grammar_ancestry ["arithmetic", "words"]
+
+val _ = set_grammar_ancestry ["arithmetic", "integer", "words"];
+
+(* Small general definition *)
+val small_enough_int_def = Define `
+  small_enough_int i <=> -268435457 <= i /\ i <= 268435457:int`;
+
+val _ = numLib.prefer_num();
 
 (* these must match what the prim_types_program generates *)
 
@@ -36,7 +46,7 @@ val _ = Datatype`
 
 (* The code below replaces "Cons" in hol output with the chosen symbol *)
 val _ = set_fixity "▷" (Infixl 480);
-val _ = overload_on ("▷", Term `backend_common$Cons`);
+Overload "▷" = ``backend_common$Cons``
 
 (* An "orphan" expression is one that originates directly from a declaration.
 * This happens in source_to_mod, and in con_to_dec. It is an orphan because
@@ -57,7 +67,7 @@ val mk_cons_def = Define`
        | _    => Cons tr n`;
 
 val _ = set_fixity "§" (Infixl 480);
-val _ = overload_on ("§", Term `backend_common$mk_cons`);
+Overload "§" = ``backend_common$mk_cons``
 
 (* Create new Cons trace, unless any of the original traces are `None`,
 * indicating traces are turned off. *)
@@ -83,14 +93,17 @@ val data_num_stubs_def = Define`
   data_num_stubs = word_num_stubs + (* general: *) 30 + (* dummy to make it odd *) 0 + (* bignum: *) 23 `;
 
 val bvl_num_stubs_def = Define`
-  bvl_num_stubs = data_num_stubs + 7 + (* dummy to make it a multiple of 3 *) 1
+  bvl_num_stubs = data_num_stubs + 8 + (* dummy to make it a multiple of 3 *) 0
 `;
 
 val bvl_to_bvi_namespaces_def = Define`
   bvl_to_bvi_namespaces = 3n`;
 
-val bvl_num_stub_MOD = Q.store_thm("bvl_num_stub_MOD",
-  `bvl_num_stubs MOD bvl_to_bvi_namespaces = 0`, EVAL_TAC);
+Theorem bvl_num_stub_MOD:
+   bvl_num_stubs MOD bvl_to_bvi_namespaces = 0
+Proof
+EVAL_TAC
+QED
 
 (* shift values, per dimindex(:α) *)
 val word_shift_def = Define `

@@ -9,14 +9,15 @@ open preamble
      cmlParseTheory
      inferTheory
      backendTheory
-     mlnumTheory mlintTheory mlstringTheory basisProgTheory
+     mlintTheory mlstringTheory basisProgTheory
      fromSexpTheory simpleSexpParseTheory
 
 open x64_presetTheory export_x64Theory
 open arm8_presetTheory export_arm8Theory
 open riscv_presetTheory export_riscvTheory
 open mips_presetTheory export_mipsTheory
-open arm6_presetTheory export_arm6Theory
+open arm7_presetTheory export_arm7Theory
+open ag32_presetTheory export_ag32Theory
 open export_wasmTheory
 
 val _ = new_theory"compiler";
@@ -60,6 +61,8 @@ val _ = Datatype`
      ; input_is_sexp       : bool
      ; exclude_prelude     : bool
      ; skip_type_inference : bool
+     ; only_print_types    : bool
+     ; only_print_sexp     : bool
      |>`;
 
 val _ = Datatype`compile_error = ParseError | TypeError mlstring | CompileError | ConfigError mlstring`;
@@ -81,7 +84,7 @@ val locs_to_string_def = Define `
          toString endl.col])`;
 
 (* this is a rather annoying feature of peg_exec requiring locs... *)
-val _ = overload_on("add_locs",``MAP (λc. (c,unknown_loc))``);
+Overload add_locs = ``MAP (λc. (c,unknown_loc))``
 
 (* TODO: Passing in stack and heap size here, which originally belong
  * to the top configuration is not clean. However, stack_to_wasm needs
@@ -127,7 +130,14 @@ val compile_def = Define`
                locs_to_string locs])), [])
        | Success ic =>
           let _ = empty_ffi (strlit "finished: type inference") in
-          case backend$compile_tap c.backend_config (prelude ++ prog) of
+          if c.only_print_types then
+            (Failure (TypeError (concat ([strlit "\n"] ++
+                                         inf_env_to_types_string ic ++
+                                         [strlit "\n"]))), [])
+          else if c.only_print_sexp then
+            (Failure (TypeError (implode(print_sexp (listsexp (MAP decsexp full_prog))))),[])
+          else
+          case backend$compile_tap c.backend_config full_prog of
           | (NONE, td) => (Failure CompileError, td)
           | (SOME x, td) => (Success x, td)`;
 
@@ -135,9 +145,17 @@ val compile_def = Define`
 (* The top-level compiler *)
 val error_to_str_def = Define`
   (error_to_str ParseError = strlit "### ERROR: parse error\n") /\
-  (error_to_str (TypeError s) = concat [strlit "### ERROR: type error\n"; s; strlit "\n"]) /\
+  (error_to_str (TypeError s) =
+     (* if the first char in the message is a newline char then it isn't an error *)
+     if (if strlen s = 0 then T else
+         if strsub s 0 = #"\n" then F else T) then
+       concat [strlit "### ERROR: type error\n"; s; strlit "\n"]
+     else s) /\
   (error_to_str (ConfigError s) = concat [strlit "### ERROR: config error\n"; s; strlit "\n"]) /\
   (error_to_str CompileError = strlit "### ERROR: compile error\n")`;
+
+val is_error_msg_def = Define `
+  is_error_msg x = mlstring$isPrefix (strlit "###") x`;
 
 (* TODO: translator fails inside mlstringLib.mlstring_case_conv
   when the following definition just matches against (strlit str) directly *)
@@ -370,6 +388,14 @@ val parse_tap_conf_def = Define`
   let fname = find_str (strlit"--tapfname=") ls in
   INL (mk_tap_config fname (tap_all_star ++ taps))`
 
+(* lab *)
+val parse_lab_conf_def = Define`
+  parse_lab_conf ls lab =
+    let hs = find_num (strlit "--hash_size=") ls lab.hash_size in
+      case hs of
+        INL r => INL (lab with <|hash_size := r |>)
+      | INR s => INR s`
+
 (* Extend configuration with runtime parameters after
  * it was initialized from a preset. *)
 val extend_conf_def = Define`
@@ -417,13 +443,14 @@ val parse_target_64_def = Define`
     else if rest = strlit"riscv" then INL (riscv_backend_preset,riscv_export)
     else INR (concat [strlit"Unrecognized 64-bit target option: ";rest])`
 
-(* Defaults to arm6, currently no other 32-bit architecture*)
+(* Defaults to arm7 if no target given *)
 val parse_target_32_def = Define`
   parse_target_32 ls =
   case find_str (strlit"--target=") ls of
-    NONE => INL (arm6_backend_preset,arm6_export)
+    NONE => INL (arm7_backend_preset,arm7_export)
   | SOME rest =>
-    if rest = strlit"arm6" then INL (arm6_backend_preset,arm6_export)
+    if rest = strlit"arm7" then INL (arm7_backend_preset,arm7_export)
+    else if rest = strlit"ag32" then INL (ag32_backend_preset,ag32_export)
     else INR (concat [strlit"Unrecognized 32-bit target option: ";rest])`
 
 (* Default stack and heap limits. Unit of measure is mebibytes, i.e. 1024^2B. *)
@@ -440,9 +467,11 @@ val parse_top_config_def = Define`
   let sexp = find_bool (strlit"--sexp=") ls F in
   let prelude = find_bool (strlit"--exclude_prelude=") ls F in
   let typeinference = find_bool (strlit"--skip_type_inference=") ls F in
+  let sexpprint = MEMBER (strlit"--print_sexp") ls in
+  let onlyprinttypes = MEMBER (strlit"--types") ls in
   case (heap,stack,sexp,prelude,typeinference) of
     (INL heap,INL stack,INL sexp,INL prelude,INL typeinference) =>
-      INL (heap,stack,sexp,prelude,typeinference)
+      INL (heap,stack,sexp,prelude,typeinference,onlyprinttypes,sexpprint)
   | _ => INR (concat [get_err_str heap;
                get_err_str stack;
                get_err_str sexp;
@@ -461,6 +490,10 @@ val format_compiler_result_def = Define`
   format_compiler_result bytes_export heap stack
     (Success (bytes,datax,ffi_names)) =
     (bytes_export ffi_names heap stack bytes datax, implode "")`;
+(* TODO from upstream:
+    (Success ((bytes:word8 list),(data:'a word list),(c:'a backend$config))) =
+    (bytes_export (the [] c.lab_conf.ffi_names) heap stack bytes data, implode "")`;
+ *)
 
 (* FIXME TODO: this is an awful workaround to avoid implementing a file writer
    right now. *)
@@ -482,7 +515,7 @@ val compile_64_def = Define`
   let topconf = parse_top_config cl in
   let wasm = parse_wasm cl in
   case (confexp,topconf,wasm) of
-    (INL (preset,exportf), INL(heap,stack,sexp,prelude,typeinfer), INL wasm) =>
+    (INL (preset,exportf), INL(heap,stack,sexp,prelude,typeinfer,onlyprinttypes,sexpprint), INL wasm) =>
     (let ext_conf = extend_conf cl (preset_to_conf preset wasm heap stack) in
      (* The following is bit hacky, we change our minds on the export in case of wasm... *)
      let exportf = if wasm then wasm_export else exportf in
@@ -493,10 +526,17 @@ val compile_64_def = Define`
              backend_config      := ext_conf;
              input_is_sexp       := sexp;
              exclude_prelude     := prelude;
-             skip_type_inference := typeinfer |> in
+             skip_type_inference := typeinfer;
+             only_print_types    := onlyprinttypes;
+             only_print_sexp     := sexpprint|> in
         (case compiler$compile compiler_conf basis input of
           (Success (bytes,data,ffi_names), td) =>
             (add_tap_output td (exportf ffi_names heap stack bytes data),
+(* TODO from upstream:
+          (Success (bytes,data,c), td) =>
+            (add_tap_output td (exportf (the [] c.lab_conf.ffi_names)
+                heap stack bytes data),
+ *)
               implode "")
         | (Failure err, td) => (add_tap_output td (List []), error_to_str err))
     | INR err =>
@@ -517,7 +557,7 @@ val compile_32_def = Define`
   let confexp = parse_target_32 cl in
   let topconf = parse_top_config cl in
   case (confexp,topconf) of
-    (INL (preset,exportf), INL(heap,stack,sexp,prelude,typeinfer)) =>
+    (INL (preset,exportf), INL(heap,stack,sexp,prelude,typeinfer,onlyprinttypes,sexpprint)) =>
     (let ext_conf = extend_conf cl (preset_to_conf preset F (* no wasm for 32bit *) heap stack) in
     case ext_conf of
       INL ext_conf =>
@@ -526,10 +566,18 @@ val compile_32_def = Define`
              backend_config      := ext_conf;
              input_is_sexp       := sexp;
              exclude_prelude     := prelude;
-             skip_type_inference := typeinfer |> in
+             skip_type_inference := typeinfer;
+             only_print_types    := onlyprinttypes;
+             only_print_sexp     := sexpprint
+             |> in
         (case compiler$compile compiler_conf basis input of
           (Success (bytes,data,ffi_names), td) =>
             (add_tap_output td (exportf ffi_names heap stack bytes data),
+(* TODO from upstream:
+          (Success (bytes,data,c), td) =>
+            (add_tap_output td (exportf (the [] c.lab_conf.ffi_names)
+                heap stack bytes data),
+ *)
               implode "")
         | (Failure err, td) => (List [], error_to_str err))
     | INR err =>

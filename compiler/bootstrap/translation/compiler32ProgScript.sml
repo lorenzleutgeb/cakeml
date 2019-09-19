@@ -1,12 +1,18 @@
-open preamble
-     arm6ProgTheory compilerTheory
+(*
+  Finish translation of the 32-bit version of the compiler.
+*)
+open preamble;
+local open ag32ProgTheory in end;
+local open arm7ProgTheory in end;
+open compilerTheory
      exportTheory
-     ml_translatorLib ml_translatorTheory
-open cfLib basis
+     ml_translatorLib ml_translatorTheory;
+open cfLib basis;
 
 val _ = new_theory"compiler32Prog";
 
-val _ = translation_extends "arm6Prog";
+val _ = translation_extends "ag32Prog";
+val _ = ml_translatorLib.use_string_type true;
 
 val _ = ml_translatorLib.ml_prog_update (ml_progLib.open_module "compiler32Prog");
 
@@ -25,9 +31,11 @@ val max_heap_limit_32_def = Define`
 
 val res = translate max_heap_limit_32_def
 
-val max_heap_limit_32_thm = Q.store_thm("max_heap_limit_32_thm",
-  `max_heap_limit (:32) = max_heap_limit_32`,
-  rw[FUN_EQ_THM] \\ EVAL_TAC);
+Theorem max_heap_limit_32_thm:
+   max_heap_limit (:32) = max_heap_limit_32
+Proof
+  rw[FUN_EQ_THM] \\ EVAL_TAC
+QED
 
 (*
 
@@ -52,8 +60,8 @@ val backend_compile_explorer_side = Q.prove(`
 
 val def = spec32
   (backendTheory.attach_bitmaps_def
-   |> Q.GENL[`bitmaps`,`bytes`,`c`]
-   |> Q.ISPECL[`bitmaps:'a word list`,`bytes:word8 list`,`c:'a lab_to_target$config`])
+   |> Q.GENL[`c'`,`bytes`,`c`]
+   |> Q.ISPECL[`lab_conf:'a lab_to_target$config`,`bytes:word8 list`,`c:'a backend$config`])
 
 val res = translate def
 
@@ -132,6 +140,11 @@ val res = translate inferTheory.init_config_def;
 *)
 val res = translate error_to_str_def;
 
+val compiler_error_to_str_side_thm = prove(
+  ``compiler_error_to_str_side x = T``,
+  fs [fetch "-" "compiler_error_to_str_side_def"])
+  |> update_precondition;
+
 val res = translate parse_bool_def;
 val res = translate parse_num_def;
 
@@ -142,8 +155,12 @@ val res = translate find_num_def;
 val res = translate get_err_str_def;
 
 val res = translate parse_num_list_def;
+
+(* comma_tokens treats strings as char lists so we switch modes temporarily *)
+val _ = ml_translatorLib.use_string_type false;
 val res = translate comma_tokens_def;
 val res = translate parse_nums_def;
+val _ = ml_translatorLib.use_string_type true;
 
 val res = translate clos_knownTheory.default_inline_factor_def;
 val res = translate clos_knownTheory.default_max_body_size_def;
@@ -155,6 +172,7 @@ val res = translate parse_gc_def;
 val res = translate parse_data_conf_def;
 val res = translate parse_stack_conf_def;
 val res = translate parse_tap_conf_def;
+val res = translate (parse_lab_conf_def |> spec32)
 
 val res = translate (parse_top_config_def |> SIMP_RULE (srw_ss()) [default_heap_sz_def,default_stack_sz_def]);
 
@@ -162,12 +180,19 @@ val res = translate (parse_top_config_def |> SIMP_RULE (srw_ss()) [default_heap_
   Note: ffi_asm is translated multiple times...
 *)
 
-(* arm6 *)
-val res = translate arm6_configTheory.arm6_names_def;
-val res = translate export_arm6Theory.ffi_asm_def;
-val res = translate export_arm6Theory.arm6_export_def;
+(* ag32 *)
+val res = translate ag32_configTheory.ag32_names_def;
+val res = translate export_ag32Theory.ag32_export_def;
 val res = translate
-  (arm6_configTheory.arm6_backend_config_def
+  (ag32_configTheory.ag32_backend_config_def
+   |> SIMP_RULE(srw_ss())[FUNION_FUPDATE_1]);
+
+(* arm7 *)
+val res = translate arm7_configTheory.arm7_names_def;
+val res = translate export_arm7Theory.ffi_asm_def;
+val res = translate export_arm7Theory.arm7_export_def;
+val res = translate
+  (arm7_configTheory.arm7_backend_config_def
    |> SIMP_RULE(srw_ss())[FUNION_FUPDATE_1]);
 
 (* Leave the module now, so that key things are available in the toplevel
@@ -181,7 +206,7 @@ val res = translate add_tap_output_def;
 
 val res = format_compiler_result_def
         |> Q.GENL[`bytes`,`heap`,`stack`,`c`]
-        |> Q.ISPECL[`bytes:word8 list`,`heap:num`,`stack:num`,`c:'a lab_to_target$config`]
+        |> Q.ISPECL[`bytes:word8 list`,`heap:num`,`stack:num`,`c:'a backend$config`]
         |> spec32
         |> translate;
 
@@ -191,6 +216,14 @@ val res = translate (has_version_flag_def |> SIMP_RULE (srw_ss()) [MEMBER_INTRO]
 val res = translate print_option_def
 val res = translate current_build_info_str_def
 
+val nonzero_exit_code_for_error_msg_def = Define `
+  nonzero_exit_code_for_error_msg e =
+    if compiler$is_error_msg e then
+      ml_translator$force_out_of_memory_error () else ()`;
+
+val res = translate compilerTheory.is_error_msg_def;
+val res = translate nonzero_exit_code_for_error_msg_def;
+
 val main = process_topdecs`
   fun main u =
     let
@@ -199,22 +232,24 @@ val main = process_topdecs`
       if compiler_has_version_flag cl then
         print compiler_current_build_info_str
       else
-        case compiler_compile_32 cl (String.explode (TextIO.inputAll TextIO.stdIn))  of
-          (c, e) => (print_app_list c; TextIO.output TextIO.stdErr e)
+        case compiler_compile_32 cl (TextIO.inputAll TextIO.stdIn)  of
+          (c, e) => (print_app_list c; TextIO.output TextIO.stdErr e;
+                     compiler32prog_nonzero_exit_code_for_error_msg e)
     end`;
 
 val res = append_prog main;
 
-val st = get_ml_prog_state()
+val main_v_def = fetch "-" "main_v_def";
 
-val main_spec = Q.store_thm("main_spec",
-  `app (p:'ffi ffi_proj) ^(fetch_v "main" st)
+Theorem main_spec:
+   app (p:'ffi ffi_proj) main_v
      [Conv NONE []] (STDIO fs * COMMANDLINE cl)
      (POSTv uv.
        &UNIT_TYPE () uv
        * STDIO (full_compile_32 (TL cl) (get_stdin fs) fs)
-       * COMMANDLINE cl)`,
-  xcf "main" st
+       * COMMANDLINE cl)
+Proof
+  xcf_with_def "main" main_v_def
   \\ xlet_auto >- (xcon \\ xsimpl)
   \\ xlet_auto
   >- (
@@ -253,25 +288,30 @@ val main_spec = Q.store_thm("main_spec",
     \\ CONV_TAC SWAP_EXISTS_CONV
     \\ qexists_tac`fs`
     \\ xsimpl)
-  \\ xlet_auto >- (xsimpl \\ fs[FD_stdin])
-  \\ xlet_auto >- xsimpl
+  \\ xlet_auto >- (xsimpl \\ fs[INSTREAM_stdin, STD_streams_get_mode])
+  \\ fs [GSYM HOL_STRING_TYPE_def]
   \\ xlet_auto >- xsimpl
   \\ fs [full_compile_32_def]
   \\ pairarg_tac
   \\ fs[ml_translatorTheory.PAIR_TYPE_def]
   \\ xmatch
   \\ xlet_auto >- xsimpl
-  \\ xapp_spec output_stderr_spec
-  \\ xsimpl
-  \\ qmatch_goalsub_abbrev_tac`STDIO fs'`
-  \\ CONV_TAC(RESORT_EXISTS_CONV List.rev)
-  \\ qexists_tac`fs'` \\ xsimpl
-  \\ instantiate
-  \\ xsimpl);
+  \\ qmatch_goalsub_abbrev_tac `STDIO fs'`
+  \\ xlet `POSTv uv. &UNIT_TYPE () uv * STDIO (add_stderr fs' err) *
+                     COMMANDLINE cl`
+  THEN1
+   (xapp_spec output_stderr_spec \\ xsimpl
+    \\ qexists_tac `COMMANDLINE cl`
+    \\ asm_exists_tac \\ xsimpl
+    \\ qexists_tac `fs'` \\ xsimpl)
+  \\ xapp
+  \\ asm_exists_tac \\ simp [] \\ xsimpl
+QED
 
-val main_whole_prog_spec = Q.store_thm("main_whole_prog_spec",
-  `whole_prog_spec ^(fetch_v "main" st) cl fs NONE
-    ((=) (full_compile_32 (TL cl) (get_stdin fs) fs))`,
+Theorem main_whole_prog_spec:
+   whole_prog_spec main_v cl fs NONE
+    ((=) (full_compile_32 (TL cl) (get_stdin fs) fs))
+Proof
   simp[whole_prog_spec_def,UNCURRY]
   \\ qmatch_goalsub_abbrev_tac`fs1 = _ with numchars := _`
   \\ qexists_tac`fs1`
@@ -281,9 +321,11 @@ val main_whole_prog_spec = Q.store_thm("main_whole_prog_spec",
        GSYM add_stdo_with_numchars, with_same_numchars]
   \\ simp [SEP_CLAUSES]
   \\ match_mp_tac(MP_CANON(MATCH_MP app_wgframe main_spec))
-  \\ xsimpl);
+  \\ xsimpl
+QED
 
-val (semantics_thm,prog_tm) = whole_prog_thm st "main" main_whole_prog_spec;
+val (semantics_thm,prog_tm) =
+  whole_prog_thm (get_ml_prog_state()) "main" main_whole_prog_spec;
 
 val compiler32_prog_def = Define`compiler32_prog = ^prog_tm`;
 

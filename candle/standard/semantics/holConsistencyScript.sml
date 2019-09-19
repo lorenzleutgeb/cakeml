@@ -1,8 +1,17 @@
+(*
+  Proves consistency of the inference system: starting from any context with a
+  model, any context reached by non-axiomatic extensions has both provable and
+  unprovable sequents. And the base case: the HOL contexts (initial context
+  with no axioms, with all but infinity axiom, with all three axioms) have
+  models (under suitable assumptions).
+*)
 open preamble
      setSpecTheory holSyntaxLibTheory holSyntaxTheory holSyntaxExtraTheory holBoolSyntaxTheory holAxiomsSyntaxTheory
      holSemanticsTheory holSemanticsExtraTheory holSoundnessTheory holExtensionTheory holBoolTheory holAxiomsTheory
 
 val _ = new_theory"holConsistency"
+
+val _ = Parse.hide "mem";
 
 val mem = ``mem:'U->'U->bool``
 
@@ -11,10 +20,11 @@ val consistent_theory_def = Define`
         (thy,[]) |- (Var (strlit"x") Bool === Var (strlit"x") Bool) ∧
       ¬((thy,[]) |- (Var (strlit"x") Bool === Var (strlit"y") Bool))`
 
-val proves_consistent = Q.store_thm("proves_consistent",
-  `is_set_theory ^mem ⇒
+Theorem proves_consistent:
+   is_set_theory ^mem ⇒
     ∀thy. theory_ok thy ∧ (∃i. i models thy) ⇒
-      consistent_theory thy`,
+      consistent_theory thy
+Proof
   rw[consistent_theory_def] >- (
     match_mp_tac (List.nth(CONJUNCTS proves_rules,8)) >>
     simp[term_ok_def,type_ok_def] >>
@@ -43,10 +53,12 @@ val proves_consistent = Q.store_thm("proves_consistent",
   impl_tac >- (
     simp[term_ok_equation,is_structure_def] >>
     fs[models_def,theory_ok_def] ) >>
-  simp[Abbr`s`,Abbr`t`,termsem_def,boolean_eq_true,Abbr`v`,true_neq_false])
+  simp[Abbr`s`,Abbr`t`,termsem_def,boolean_eq_true,Abbr`v`,true_neq_false]
+QED
 
-val init_ctxt_has_model = Q.store_thm("init_ctxt_has_model",
-  `is_set_theory ^mem ⇒ ∃i. i models (thyof init_ctxt)`,
+Theorem init_ctxt_has_model:
+   is_set_theory ^mem ⇒ ∃i. i models (thyof init_ctxt)
+Proof
   rw[models_def,init_ctxt_def,conexts_of_upd_def] >>
   rw[is_std_interpretation_def,is_std_type_assignment_def,EXISTS_PROD] >>
   qho_match_abbrev_tac`∃f g. P f g ∧ (Q f ∧ f x2 z2 = y2) ∧ (g interprets x3 on z3 as y3)` >>
@@ -62,21 +74,25 @@ val init_ctxt_has_model = Q.store_thm("init_ctxt_has_model",
     match_mp_tac (UNDISCH abstract_in_funspace) >> rw[boolean_in_boolset] ) >>
   Cases_on`ls`>>fs[]>>Cases_on`t`>>fs[listTheory.LENGTH_NIL] >>
   match_mp_tac (UNDISCH funspace_inhabited) >>
-  metis_tac[])
+  metis_tac[]
+QED
 
-val min_hol_consistent = Q.store_thm("min_hol_consistent",
-  `is_set_theory ^mem ⇒
+Theorem min_hol_consistent:
+   is_set_theory ^mem ⇒
     ∀ctxt. ctxt extends init_ctxt ∧ (∀p. MEM (NewAxiom p) ctxt ⇒ MEM (NewAxiom p) init_ctxt) ⇒
-      consistent_theory (thyof ctxt)`,
+      consistent_theory (thyof ctxt)
+Proof
   strip_tac >> gen_tac >> strip_tac >>
   match_mp_tac (UNDISCH proves_consistent) >>
-  metis_tac[extends_theory_ok,extends_consistent,init_theory_ok,init_ctxt_has_model])
+  metis_tac[extends_theory_ok,extends_consistent,init_theory_ok,init_ctxt_has_model]
+QED
 
 val fhol_ctxt_def = Define`
   fhol_ctxt = mk_select_ctxt (mk_eta_ctxt (mk_bool_ctxt init_ctxt))`
 
-val fhol_extends_bool = Q.store_thm("fhol_extends_bool",
-  `fhol_ctxt extends (mk_bool_ctxt init_ctxt)`,
+Theorem fhol_extends_bool:
+   fhol_ctxt extends (mk_bool_ctxt init_ctxt)
+Proof
   rw[fhol_ctxt_def] >>
   match_mp_tac extends_trans >>
   qexists_tac`mk_eta_ctxt (mk_bool_ctxt init_ctxt)` >>
@@ -87,7 +103,8 @@ val fhol_extends_bool = Q.store_thm("fhol_extends_bool",
     `sigof init_ctxt = sigof (thyof init_ctxt)` by simp[] >>
     metis_tac[theory_ok_sig,init_theory_ok] ) >>
   match_mp_tac select_extends >>
-  EVAL_TAC )
+  EVAL_TAC
+QED
 
 fun tac extends_bool unfold =
   strip_tac >> gen_tac >> strip_tac >>
@@ -132,32 +149,37 @@ fun tac extends_bool unfold =
   impl_tac >- fs[is_bool_interpretation_def] >>
   disch_then(qx_choose_then`i3`strip_assume_tac)
 
-val fhol_has_model = Q.store_thm("fhol_has_model",
-  `is_set_theory ^mem ⇒
+Theorem fhol_has_model:
+   is_set_theory ^mem ⇒
     ∀ctxt.
       ctxt extends fhol_ctxt ∧
       (∀p. MEM (NewAxiom p) ctxt ⇒ MEM (NewAxiom p) fhol_ctxt) ⇒
-      theory_ok (thyof ctxt) ∧ ∃i. i models thyof ctxt`,
+      theory_ok (thyof ctxt) ∧ ∃i. i models thyof ctxt
+Proof
   tac fhol_extends_bool ALL_TAC >>
   fs[GSYM fhol_ctxt_def] >>
   qspecl_then[`fhol_ctxt`,`ctxt`]mp_tac(UNDISCH extends_consistent) >> simp[] >>
-  metis_tac[])
+  metis_tac[]
+QED
 
-val _ = Q.store_thm("fhol_consistent",
-  `is_set_theory ^mem ⇒
+Theorem fhol_consistent:
+   is_set_theory ^mem ⇒
     ∀ctxt.
       ctxt extends fhol_ctxt ∧
       (∀p. MEM (NewAxiom p) ctxt ⇒ MEM (NewAxiom p) fhol_ctxt) ⇒
-      consistent_theory (thyof ctxt)`,
+      consistent_theory (thyof ctxt)
+Proof
   strip_tac >> gen_tac >> strip_tac >>
   match_mp_tac (UNDISCH proves_consistent) >>
-  metis_tac[fhol_has_model])
+  metis_tac[fhol_has_model]
+QED
 
 val hol_ctxt_def = Define`
   hol_ctxt = mk_infinity_ctxt fhol_ctxt`
 
-val hol_extends_fhol = Q.store_thm("hol_extends_fhol",
-  `hol_ctxt extends fhol_ctxt`,
+Theorem hol_extends_fhol:
+   hol_ctxt extends fhol_ctxt
+Proof
   rw[hol_ctxt_def] >>
   match_mp_tac infinity_extends >>
   reverse conj_tac >- EVAL_TAC >>
@@ -165,19 +187,23 @@ val hol_extends_fhol = Q.store_thm("hol_extends_fhol",
   match_exists_tac (concl fhol_extends_bool) >>
   conj_tac >- ACCEPT_TAC fhol_extends_bool >>
   match_mp_tac (MP_CANON extends_theory_ok) >>
-  metis_tac[bool_extends_init,init_theory_ok])
+  metis_tac[bool_extends_init,init_theory_ok]
+QED
 
-val hol_extends_bool = Q.store_thm("hol_extends_bool",
-  `hol_ctxt extends (mk_bool_ctxt init_ctxt)`,
+Theorem hol_extends_bool:
+   hol_ctxt extends (mk_bool_ctxt init_ctxt)
+Proof
   match_mp_tac extends_trans >>
-  metis_tac[hol_extends_fhol,fhol_extends_bool])
+  metis_tac[hol_extends_fhol,fhol_extends_bool]
+QED
 
-val hol_has_model = Q.store_thm("hol_has_model",
-  `is_set_theory ^mem ∧ (∃inf. is_infinite ^mem inf) ⇒
+Theorem hol_has_model:
+   is_set_theory ^mem ∧ (∃inf. is_infinite ^mem inf) ⇒
     ∀ctxt.
       ctxt extends hol_ctxt ∧
       (∀p. MEM (NewAxiom p) ctxt ⇒ MEM (NewAxiom p) hol_ctxt) ⇒
-      theory_ok (thyof ctxt) ∧ ∃i. i models thyof ctxt`,
+      theory_ok (thyof ctxt) ∧ ∃i. i models thyof ctxt
+Proof
   tac hol_extends_bool (fs[hol_ctxt_def]) >>
   assume_tac(UNDISCH(PROVE[]``is_infinite mem inf ⇒ ∃inf. is_infinite ^mem inf``)) >>
   qspec_then`mk_select_ctxt (mk_eta_ctxt (mk_bool_ctxt init_ctxt))`mp_tac
@@ -206,16 +232,19 @@ val hol_has_model = Q.store_thm("hol_has_model",
   disch_then(qx_choose_then`i4`strip_assume_tac) >>
   fs[GSYM hol_ctxt_def,GSYM fhol_ctxt_def] >>
   qspecl_then[`hol_ctxt`,`ctxt`]mp_tac(UNDISCH extends_consistent) >> simp[] >>
-  metis_tac[])
+  metis_tac[]
+QED
 
-val _ = Q.store_thm("hol_consistent",
-  `is_set_theory ^mem ∧ (∃inf. is_infinite ^mem inf) ⇒
+Theorem hol_consistent:
+   is_set_theory ^mem ∧ (∃inf. is_infinite ^mem inf) ⇒
     ∀ctxt.
       ctxt extends hol_ctxt ∧
       (∀p. MEM (NewAxiom p) ctxt ⇒ MEM (NewAxiom p) hol_ctxt) ⇒
-      consistent_theory (thyof ctxt)`,
+      consistent_theory (thyof ctxt)
+Proof
   strip_tac >> gen_tac >> strip_tac >>
   match_mp_tac (UNDISCH proves_consistent) >>
-  metis_tac[hol_has_model])
+  metis_tac[hol_has_model]
+QED
 
 val _ = export_theory()

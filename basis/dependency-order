@@ -13,18 +13,18 @@ Option
 List
 Vector
 String
-basics
+mlbasics (defines Bool, Pair)
 Int
-Num
 Rat
 Char
 Word64
 Word8
 Word8Array
 Array
-Compare
 Map
+Hashtable
 CommandLine
+Double
 TextIO
 PrettyPrinter
 basis

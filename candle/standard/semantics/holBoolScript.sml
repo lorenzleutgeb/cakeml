@@ -1,27 +1,33 @@
+(*
+  Define semantics for the Boolean operations and show the definitions are
+  correct.
+*)
 open preamble holSyntaxLibTheory holSyntaxTheory holSyntaxExtraTheory holBoolSyntaxTheory
      holSemanticsTheory holSemanticsExtraTheory setSpecTheory
 
 val _ = new_theory"holBool"
 
+val _ = Parse.hide "mem";
+
 val mem = ``mem:'U->'U->bool``
 
-val _ = Parse.temp_overload_on("p",``Var (strlit "p") Bool``)
-val _ = Parse.temp_overload_on("FAp",``Forall (strlit "p") Bool``)
-val _ = Parse.temp_overload_on("q",``Var (strlit "q") Bool``)
-val _ = Parse.temp_overload_on("FAq",``Forall (strlit "q") Bool``)
-val _ = Parse.temp_overload_on("r",``Var (strlit "r") Bool``)
-val _ = Parse.temp_overload_on("FAr",``Forall (strlit "r") Bool``)
-val _ = Parse.temp_overload_on("f",``Var (strlit "f") (Fun Bool (Fun Bool Bool))``)
-val _ = Parse.temp_overload_on("A",``Tyvar (strlit "A")``)
-val _ = Parse.temp_overload_on("P",``Var (strlit "P") (Fun A Bool)``)
-val _ = Parse.temp_overload_on("x",``Var (strlit "x") A``)
-val _ = Parse.temp_overload_on("FAx",``Forall (strlit "x") A``)
+Overload p[local] = ``Var (strlit "p") Bool``
+Overload FAp[local] = ``Forall (strlit "p") Bool``
+Overload q[local] = ``Var (strlit "q") Bool``
+Overload FAq[local] = ``Forall (strlit "q") Bool``
+Overload r[local] = ``Var (strlit "r") Bool``
+Overload FAr[local] = ``Forall (strlit "r") Bool``
+Overload f[local] = ``Var (strlit "f") (Fun Bool (Fun Bool Bool))``
+Overload A[local] = ``Tyvar (strlit "A")``
+Overload P[local] = ``Var (strlit "P") (Fun A Bool)``
+Overload x[local] = ``Var (strlit "x") A``
+Overload FAx[local] = ``Forall (strlit "x") A``
 
 val sigs = [is_true_sig_def, is_false_sig_def, is_implies_sig_def, is_and_sig_def,
             is_or_sig_def, is_not_sig_def, is_forall_sig_def, is_exists_sig_def]
 
-val bool_sig_instances = Q.store_thm("bool_sig_instances",
-  `is_bool_sig sig ⇒
+Theorem bool_sig_instances:
+   is_bool_sig sig ⇒
     instance (tmsof sig) (i:'U interpretation) (strlit "T") Bool = (K (tmaof i (strlit "T") [])) ∧
     instance (tmsof sig) i (strlit "F") Bool = (K (tmaof i (strlit "F") [])) ∧
     instance (tmsof sig) i (strlit "==>") (Fun Bool (Fun Bool Bool)) = (K (tmaof i (strlit "==>") [])) ∧
@@ -29,54 +35,56 @@ val bool_sig_instances = Q.store_thm("bool_sig_instances",
     instance (tmsof sig) i (strlit "\\/") (Fun Bool (Fun Bool Bool)) = (K (tmaof i (strlit "\\/") [])) ∧
     instance (tmsof sig) i (strlit "~") (Fun Bool Bool) = (K (tmaof i (strlit "~") [])) ∧
     instance (tmsof sig) i (strlit "!") (Fun (Fun A Bool) Bool) = (λτ. tmaof i (strlit "!") [τ (strlit "A")]) ∧
-    instance (tmsof sig) i (strlit "?") (Fun (Fun A Bool) Bool) = (λτ. tmaof i (strlit "?") [τ (strlit "A")])`,
+    instance (tmsof sig) i (strlit "?") (Fun (Fun A Bool) Bool) = (λτ. tmaof i (strlit "?") [τ (strlit "A")])
+Proof
   rw[is_bool_sig_def] >> fs sigs >> imp_res_tac identity_instance >> rw[FUN_EQ_THM] >>
-  rpt AP_TERM_TAC >> rw[FUN_EQ_THM,tyvars_def] >> EVAL_TAC >> metis_tac[])
+  rpt AP_TERM_TAC >> rw[FUN_EQ_THM,tyvars_def] >> EVAL_TAC >> metis_tac[]
+QED
 
 val Boolrel_def = xDefine"Boolrel"`
   Boolrel0 ^mem R =
       (Abstract boolset (Funspace boolset boolset)
            (λp. (Abstract boolset boolset
               (λq. Boolean (R (p = True) (q = True))))))`
-val _ = Parse.overload_on("Boolrel",``Boolrel0 ^mem``)
+Overload Boolrel = ``Boolrel0 ^mem``
 
 val is_true_interpretation_def = xDefine"is_true_interpretation"`
   is_true_interpretation0 ^mem γ ⇔ (γ:'U tmass) interprets (strlit "T") on [] as K True`
-val _ = Parse.overload_on("is_true_interpretation",``is_true_interpretation0 ^mem``)
+Overload is_true_interpretation = ``is_true_interpretation0 ^mem``
 
 val is_and_interpretation_def = xDefine"is_and_interpretation"`
   is_and_interpretation0 ^mem γ ⇔ γ interprets (strlit "/\\") on [] as K (Boolrel $/\)`
-val _ = Parse.overload_on("is_and_interpretation",``is_and_interpretation0 ^mem``)
+Overload is_and_interpretation = ``is_and_interpretation0 ^mem``
 
 val is_implies_interpretation_def = xDefine"is_implies_interpretation"`
   is_implies_interpretation0 ^mem γ ⇔ γ interprets (strlit "==>") on [] as K (Boolrel $==>)`
-val _ = Parse.overload_on("is_implies_interpretation",``is_implies_interpretation0 ^mem``)
+Overload is_implies_interpretation = ``is_implies_interpretation0 ^mem``
 
 val is_forall_interpretation_def = xDefine"is_forall_interpretation"`
   is_forall_interpretation0 ^mem γ ⇔ γ
     interprets (strlit "!") on [strlit "A"] as
        (λl. Abstract (Funspace (HD l) boolset) boolset
               (λP. Boolean (∀x. x <: (HD l) ⇒ Holds P x)))`
-val _ = Parse.overload_on("is_forall_interpretation",``is_forall_interpretation0 ^mem``)
+Overload is_forall_interpretation = ``is_forall_interpretation0 ^mem``
 
 val is_exists_interpretation_def = xDefine"is_exists_interpretation"`
   is_exists_interpretation0 ^mem γ ⇔ γ
     interprets (strlit "?") on [strlit "A"] as
        (λl. Abstract (Funspace (HD l) boolset) boolset
               (λP. Boolean (∃x. x <: (HD l) ∧ Holds P x)))`
-val _ = Parse.overload_on("is_exists_interpretation",``is_exists_interpretation0 ^mem``)
+Overload is_exists_interpretation = ``is_exists_interpretation0 ^mem``
 
 val is_or_interpretation_def = xDefine"is_or_interpretation"`
   is_or_interpretation0 ^mem γ ⇔ γ interprets (strlit "\\/") on [] as K (Boolrel $\/)`
-val _ = Parse.overload_on("is_or_interpretation",``is_or_interpretation0 ^mem``)
+Overload is_or_interpretation = ``is_or_interpretation0 ^mem``
 
 val is_false_interpretation_def = xDefine"is_false_interpretation"`
   is_false_interpretation0 ^mem γ ⇔ (γ:'U tmass) interprets (strlit "F") on [] as K False`
-val _ = Parse.overload_on("is_false_interpretation",``is_false_interpretation0 ^mem``)
+Overload is_false_interpretation = ``is_false_interpretation0 ^mem``
 
 val is_not_interpretation_def = xDefine"is_not_interpretation"`
   is_not_interpretation0 ^mem γ ⇔ γ interprets (strlit "~") on [] as K (Abstract boolset boolset (λp. Boolean (p ≠ True)))`
-val _ = Parse.overload_on("is_not_interpretation",``is_not_interpretation0 ^mem``)
+Overload is_not_interpretation = ``is_not_interpretation0 ^mem``
 
 val ints = [is_true_interpretation_def,is_and_interpretation_def,is_implies_interpretation_def,
             is_forall_interpretation_def,is_exists_interpretation_def,is_or_interpretation_def,
@@ -93,12 +101,14 @@ val is_bool_interpretation_def = xDefine"is_bool_interpretation"`
     is_or_interpretation (tmaof i) ∧
     is_false_interpretation (tmaof i) ∧
     is_not_interpretation (tmaof i)`
-val _ = Parse.overload_on("is_bool_interpretation",``is_bool_interpretation0 ^mem``)
+Overload is_bool_interpretation = ``is_bool_interpretation0 ^mem``
 
-val boolrel_in_funspace = Q.store_thm("boolrel_in_funspace",
-  `is_set_theory ^mem ⇒ Boolrel R <: Funspace boolset (Funspace boolset boolset)`,
+Theorem boolrel_in_funspace:
+   is_set_theory ^mem ⇒ Boolrel R <: Funspace boolset (Funspace boolset boolset)
+Proof
   rw[Boolrel_def] >> match_mp_tac (UNDISCH abstract_in_funspace) >> rw[] >>
-  match_mp_tac (UNDISCH abstract_in_funspace) >> rw[boolean_in_boolset] )
+  match_mp_tac (UNDISCH abstract_in_funspace) >> rw[boolean_in_boolset]
+QED
 val _ = export_rewrites["boolrel_in_funspace"]
 
 val Defs = [TrueDef_def, AndDef_def, ImpliesDef_def, ForallDef_def, ExistsDef_def, OrDef_def, FalseDef_def, NotDef_def]
@@ -153,10 +163,11 @@ val apply_abstract_tac = rpt ( (
     match_mp_tac (UNDISCH apply_in_rng) >>
     HINT_EXISTS_TAC >> rw[]
 
-val apply_boolrel = Q.store_thm("apply_boolrel",
-  `is_set_theory ^mem ⇒
+Theorem apply_boolrel:
+   is_set_theory ^mem ⇒
     ∀b1 b2 b3. b1 <: boolset ∧ b2 <: boolset ∧ (b3 = Boolean (R (b1 = True) (b2 = True))) ⇒
-      Boolrel R ' b1 ' b2 = b3 `,
+      Boolrel R ' b1 ' b2 = b3
+Proof
   rw[] >>
   `Boolrel R ' b1 = Abstract boolset boolset (λb2. Boolean (R (b1 = True) (b2 = True)))` by (
     rw[Boolrel_def] >>
@@ -166,13 +177,15 @@ val apply_boolrel = Q.store_thm("apply_boolrel",
     rw[boolean_in_boolset] ) >>
   rw[] >>
   match_mp_tac apply_abstract_matchable >>
-  rw[boolean_in_boolset] )
+  rw[boolean_in_boolset]
+QED
 
-val bool_has_bool_interpretation = Q.store_thm("bool_has_bool_interpretation",
-  `is_set_theory ^mem ⇒
+Theorem bool_has_bool_interpretation:
+   is_set_theory ^mem ⇒
     ∀ctxt i. theory_ok (thyof (mk_bool_ctxt ctxt)) ∧
              i models (thyof (mk_bool_ctxt ctxt)) ⇒
-             is_bool_interpretation i`,
+             is_bool_interpretation i
+Proof
   rw[] >>
   simp[is_bool_interpretation_def] >>
   conj_asm1_tac >- fs[models_def] >>
@@ -490,14 +503,16 @@ val bool_has_bool_interpretation = Q.store_thm("bool_has_bool_interpretation",
   rpt (last_x_assum(qspec_then`τ`mp_tac)>>simp[]>>strip_tac) >>
   match_mp_tac (UNDISCH abstract_eq) >>
   simp[boolean_in_boolset,SIMP_RULE(srw_ss())[]apply_boolrel,combinTheory.APPLY_UPDATE_THM,mem_boolset,boolean_def] >>
-  rw[] >> rw[] >> fs[])
+  rw[] >> rw[] >> fs[]
+QED
 
-val extends_is_bool_interpretation = Q.store_thm("extends_is_bool_interpretation",
-  `is_set_theory ^mem ∧
+Theorem extends_is_bool_interpretation:
+   is_set_theory ^mem ∧
     ctxt2 extends (mk_bool_ctxt ctxt) ∧
     theory_ok (thyof (mk_bool_ctxt ctxt)) ∧
     i models (thyof ctxt2) ⇒
-    is_bool_interpretation i`,
+    is_bool_interpretation i
+Proof
   strip_tac >>
   `i models thyof (mk_bool_ctxt ctxt)` by (
     `∃x y z. thyof (mk_bool_ctxt ctxt) = ((x,y),z)` by metis_tac[pairTheory.PAIR] >>
@@ -511,10 +526,11 @@ val extends_is_bool_interpretation = Q.store_thm("extends_is_bool_interpretation
     rpt BasicProvers.VAR_EQ_TAC >>
     imp_res_tac extends_sub >> fs[] >>
     fs[theory_ok_def] ) >>
-  metis_tac[bool_has_bool_interpretation])
+  metis_tac[bool_has_bool_interpretation]
+QED
 
-val termsem_implies = Q.store_thm("termsem_implies",
-  `is_set_theory ^mem ⇒
+Theorem termsem_implies:
+   is_set_theory ^mem ⇒
     ∀s i v p1 p2.
     is_valuation (tysof s) (tyaof i) v ∧
     is_interpretation s i ∧
@@ -524,7 +540,8 @@ val termsem_implies = Q.store_thm("termsem_implies",
     is_implies_sig (tmsof s) ∧ is_implies_interpretation (tmaof i) ⇒
     termsem (tmsof s) i v (Implies p1 p2) =
     Boolean (termsem (tmsof s) i v p1 = True ⇒
-             termsem (tmsof s) i v p2 = True)`,
+             termsem (tmsof s) i v p2 = True)
+Proof
   rw[termsem_def,is_implies_sig_def,is_implies_interpretation_def] >>
   qspecl_then[`tmsof s`,`i`,`strlit"==>"`]mp_tac instance_def >> simp[] >>
   disch_then(qspec_then`[]`mp_tac) >>
@@ -556,10 +573,11 @@ val termsem_implies = Q.store_thm("termsem_implies",
     simp[] >>
     qexists_tac`s` >> simp[] >>
     imp_res_tac typesem_Bool >> simp[] ) >>
-  simp[boolean_in_boolset] )
+  simp[boolean_in_boolset]
+QED
 
-val termsem_forall = Q.store_thm("termsem_forall",
-  `is_set_theory ^mem ⇒
+Theorem termsem_forall:
+   is_set_theory ^mem ⇒
     ∀s i v f y b.
     is_valuation (tysof s) (tyaof i) v ∧
     is_interpretation s i ∧
@@ -568,7 +586,8 @@ val termsem_forall = Q.store_thm("termsem_forall",
     is_forall_sig (tmsof s) ∧ is_forall_interpretation (tmaof i) ⇒
     termsem (tmsof s) i v (Forall f y b) =
     Boolean (∀x. x <: typesem (tyaof i) (tyvof v) y ⇒
-                 termsem (tmsof s) i (tyvof v, ((f,y) =+ x) (tmvof v)) b = True)`,
+                 termsem (tmsof s) i (tyvof v, ((f,y) =+ x) (tmvof v)) b = True)
+Proof
   rw[termsem_def,is_forall_sig_def,is_forall_interpretation_def] >>
   qspecl_then[`tmsof s`,`i`,`strlit"!"`]mp_tac instance_def >> simp[] >>
   disch_then(qspec_then`[y,Tyvar(strlit"A")]`mp_tac) >>
@@ -604,10 +623,11 @@ val termsem_forall = Q.store_thm("termsem_forall",
   match_mp_tac (UNDISCH termsem_typesem_matchable) >>
   simp[] >> qexists_tac`s` >> simp[] >>
   fs[is_valuation_def,is_term_valuation_def,combinTheory.APPLY_UPDATE_THM] >>
-  rw[] >> rw[] )
+  rw[] >> rw[]
+QED
 
-val termsem_exists = Q.store_thm("termsem_exists",
-  `is_set_theory ^mem ⇒
+Theorem termsem_exists:
+   is_set_theory ^mem ⇒
     ∀s i v f y b.
     is_valuation (tysof s) (tyaof i) v ∧
     is_interpretation s i ∧
@@ -616,7 +636,8 @@ val termsem_exists = Q.store_thm("termsem_exists",
     is_exists_sig (tmsof s) ∧ is_exists_interpretation (tmaof i) ⇒
     termsem (tmsof s) i v (Exists f y b) =
     Boolean (∃x. x <: typesem (tyaof i) (tyvof v) y ∧
-                 termsem (tmsof s) i (tyvof v, ((f,y) =+ x) (tmvof v)) b = True)`,
+                 termsem (tmsof s) i (tyvof v, ((f,y) =+ x) (tmvof v)) b = True)
+Proof
   rw[termsem_def,is_exists_sig_def,is_exists_interpretation_def] >>
   qspecl_then[`tmsof s`,`i`,`strlit"?"`]mp_tac instance_def >> simp[] >>
   disch_then(qspec_then`[y,Tyvar(strlit"A")]`mp_tac) >>
@@ -652,10 +673,11 @@ val termsem_exists = Q.store_thm("termsem_exists",
   match_mp_tac (UNDISCH termsem_typesem_matchable) >>
   simp[] >> qexists_tac`s` >> simp[] >>
   fs[is_valuation_def,is_term_valuation_def,combinTheory.APPLY_UPDATE_THM] >>
-  rw[] >> rw[] )
+  rw[] >> rw[]
+QED
 
-val termsem_and = Q.store_thm("termsem_and",
-  `is_set_theory ^mem ⇒
+Theorem termsem_and:
+   is_set_theory ^mem ⇒
     ∀s i v p1 p2.
     is_valuation (tysof s) (tyaof i) v ∧
     is_interpretation s i ∧
@@ -665,7 +687,8 @@ val termsem_and = Q.store_thm("termsem_and",
     is_and_sig (tmsof s) ∧ is_and_interpretation (tmaof i) ⇒
     termsem (tmsof s) i v (And p1 p2) =
     Boolean (termsem (tmsof s) i v p1 = True ∧
-             termsem (tmsof s) i v p2 = True)`,
+             termsem (tmsof s) i v p2 = True)
+Proof
   rw[termsem_def,is_and_sig_def,is_and_interpretation_def] >>
   qspecl_then[`tmsof s`,`i`,`strlit"/\\"`]mp_tac instance_def >> simp[] >>
   disch_then(qspec_then`[]`mp_tac) >>
@@ -697,10 +720,11 @@ val termsem_and = Q.store_thm("termsem_and",
     simp[] >>
     qexists_tac`s` >> simp[] >>
     imp_res_tac typesem_Bool >> simp[] ) >>
-  simp[boolean_in_boolset] )
+  simp[boolean_in_boolset]
+QED
 
-val termsem_not = Q.store_thm("termsem_not",
-  `is_set_theory ^mem ⇒
+Theorem termsem_not:
+   is_set_theory ^mem ⇒
     ∀s i v p1.
     is_valuation (tysof s) (tyaof i) v ∧
     is_interpretation s i ∧
@@ -709,7 +733,8 @@ val termsem_not = Q.store_thm("termsem_not",
     typeof p1 = Bool ∧
     is_not_sig (tmsof s) ∧ is_not_interpretation (tmaof i) ⇒
     termsem (tmsof s) i v (Not p1) =
-    Boolean (termsem (tmsof s) i v p1 ≠ True)`,
+    Boolean (termsem (tmsof s) i v p1 ≠ True)
+Proof
   rw[termsem_def,is_not_sig_def,is_not_interpretation_def] >>
   qspecl_then[`tmsof s`,`i`,`strlit"~"`]mp_tac instance_def >> simp[] >>
   disch_then(qspec_then`[]`mp_tac) >>
@@ -726,6 +751,7 @@ val termsem_not = Q.store_thm("termsem_not",
   match_mp_tac (UNDISCH termsem_typesem_matchable) >>
   simp[] >>
   qexists_tac`s` >> simp[] >>
-  imp_res_tac typesem_Bool >> simp[] )
+  imp_res_tac typesem_Bool >> simp[]
+QED
 
 val _ = export_theory()

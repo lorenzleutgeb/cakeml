@@ -1,3 +1,7 @@
+(*
+  This is an example of applying the translator to the Binary Random
+  Access Lists algorithm from Chris Okasaki's book.
+*)
 open preamble
 open okasaki_miscTheory ml_translatorLib ListProgTheory;
 
@@ -7,13 +11,15 @@ val _ = translation_extends "ListProg";
 
 (* Okasaki page 123 *)
 
-val _ = Hol_datatype `
-tree = Leaf of 'a | Node of num => tree => tree`;
+Datatype:
+  tree = Leaf 'a | Node num tree tree
+End
 
-val _ = Hol_datatype `
-digit = Zero | One of 'a tree`;
+Datatype:
+  digit = Zero | One ('a tree)
+End
 
-val _ = type_abbrev ("rlist", ``:'a digit list``);
+Type rlist = ``:'a digit list``
 
 val empty_def = mlDefine `
 empty = []`;

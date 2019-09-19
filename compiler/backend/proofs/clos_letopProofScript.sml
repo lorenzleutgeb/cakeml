@@ -1,42 +1,46 @@
-open preamble closPropsTheory clos_letopTheory closSemTheory;
-open closLangTheory;
-open backendPropsTheory;
+(*
+  Correctness proof for clos_letop
+*)
+
+open preamble closPropsTheory clos_letopTheory closSemTheory
+     closLangTheory backendPropsTheory
 
 fun bump_assum pat = qpat_x_assum pat assume_tac;
 
 val _ = new_theory "clos_letopProof";
 
-val _ = temp_overload_on("let_op",``clos_letop$let_op``);
-val _ = temp_overload_on("var_list",``clos_letop$var_list``);
+Overload let_op = ``clos_letop$let_op``
+Overload var_list = ``clos_letop$var_list``
 
-val let_op_SING = store_thm("let_op_SING",
-  ``!x. ?y. let_op [x] = [y]``,
-  Induct \\ fs [let_op_def] \\ CASE_TAC);
+Theorem let_op_SING:
+   !x. ?y. let_op [x] = [y]
+Proof
+  Induct \\ fs [let_op_def] \\ CASE_TAC
+QED
 
-val HD_let_op_SING = store_thm("HD_let_op_SING[simp]",
-  ``!x. [HD (let_op [x])] = let_op [x]``,
-  strip_tac \\ strip_assume_tac (Q.SPEC `x` let_op_SING) \\ simp []);
-
-(* This seems generally useful, but what should it be called? *)
-(* TODO: this is COND_RAND *)
-val PUSH_IF = store_thm("PUSH_IF",
-  ``!f b x y. (if b then f x else f y) = f (if b then x else y)``,
-  METIS_TAC [])
-
-(* *)
+Theorem HD_let_op_SING[simp]:
+   !x. [HD (let_op [x])] = let_op [x] ∧
+       LENGTH (let_op [x]) = 1
+Proof
+  strip_tac \\ strip_assume_tac (Q.SPEC `x` let_op_SING) \\ simp []
+QED
 
 val code_rel_def = Define `
   code_rel e1 e2 <=>
     e2 = let_op e1`;
 
-val code_rel_IMP_LENGTH = store_thm("code_rel_IMP_LENGTH",
-  ``!xs ys. code_rel xs ys ==> LENGTH xs = LENGTH ys``,
-  fs [code_rel_def, LENGTH_let_op]);
+Theorem code_rel_IMP_LENGTH:
+   !xs ys. code_rel xs ys ==> LENGTH xs = LENGTH ys
+Proof
+  fs [code_rel_def, LENGTH_let_op]
+QED
 
-val code_rel_CONS_CONS = store_thm("code_rel_CONS_CONS",
-  ``code_rel (x1::x2::xs) (y1::y2::ys) ==>
-      code_rel [x1] [y1] /\ code_rel (x2::xs) (y2::ys)``,
-  simp [code_rel_def, let_op_def]);
+Theorem code_rel_CONS_CONS:
+   code_rel (x1::x2::xs) (y1::y2::ys) ==>
+      code_rel [x1] [y1] /\ code_rel (x2::xs) (y2::ys)
+Proof
+  simp [code_rel_def, let_op_def]
+QED
 
 (* value relation *)
 
@@ -44,7 +48,7 @@ val f_rel_def = Define `
   f_rel (a1, e1) (a2, e2) <=>
      a1 = a2 /\ code_rel [e1] [e2]`;
 
-val (v_rel_rules, v_rel_ind, v_rel_cases) = Hol_reln `
+Inductive v_rel:
   (!i. v_rel (Number i) (Number i)) /\
   (!w. v_rel (Word64 w) (Word64 w)) /\
   (!w. v_rel (ByteVector w) (ByteVector w)) /\
@@ -61,7 +65,8 @@ val (v_rel_rules, v_rel_ind, v_rel_cases) = Hol_reln `
      LIST_REL v_rel env1 env2 /\
      LIST_REL v_rel args1 args2 /\
      LIST_REL f_rel funs1 funs2 ==>
-       v_rel (Recclosure loc args1 env1 funs1 k) (Recclosure loc args2 env2 funs2 k))`;
+       v_rel (Recclosure loc args1 env1 funs1 k) (Recclosure loc args2 env2 funs2 k))
+End
 
 val v_rel_simps = save_thm("v_rel_simps[simp]",LIST_CONJ [
   SIMP_CONV (srw_ss()) [v_rel_cases] ``v_rel (Number n) x``,
@@ -78,11 +83,12 @@ val v_rel_simps = save_thm("v_rel_simps[simp]",LIST_CONJ [
 
 (* state relation *)
 
-val (ref_rel_rules, ref_rel_ind, ref_rel_cases) = Hol_reln `
+Inductive ref_rel:
   (!b bs. ref_rel (ByteArray b bs) (ByteArray b bs)) /\
   (!xs ys.
     LIST_REL v_rel xs ys ==>
-    ref_rel (ValueArray xs) (ValueArray ys))`
+    ref_rel (ValueArray xs) (ValueArray ys))
+End
 
 val FMAP_REL_def = Define `
   FMAP_REL r f1 f2 <=>
@@ -144,20 +150,24 @@ val v_rel_IMP_v_to_words = prove(
 
 (* *)
 
-val dest_op_SOME_IMP = store_thm("dest_op_SOME_IMP",
-  ``!x args opp. dest_op x args = SOME opp ==>
+Theorem dest_op_SOME_IMP:
+   !x args opp. dest_op x args = SOME opp ==>
       ?t xs. x = Op t opp xs /\
-             var_list 0 xs args``,
-  Cases \\ fs [dest_op_def]);
+             var_list 0 xs args
+Proof
+  Cases \\ fs [dest_op_def]
+QED
 
 
-val var_list_IMP_LENGTH = store_thm("var_list_IMP_LENGTH",
-  ``!n xs ys. var_list n xs ys ==> LENGTH xs = LENGTH ys``,
+Theorem var_list_IMP_LENGTH:
+   !n xs ys. var_list n xs ys ==> LENGTH xs = LENGTH ys
+Proof
   Induct_on `xs` \\ Cases_on `ys` \\ fs [var_list_def]
   THEN1 (Cases_on `h` \\ fs [var_list_def])
   \\ rw []
   \\ Cases_on `h'` \\ fs [var_list_def]
-  \\ res_tac);
+  \\ res_tac
+QED
 
 val var_list_IMP_evaluate = prove(
   ``!a2 a1 xs (ys:closLang$exp list) (s:('c,'ffi) closSem$state) env.
@@ -184,11 +194,12 @@ val var_list_IMP_evaluate = prove(
        |> SIMP_RULE std_ss [APPEND,LENGTH])
   \\ asm_exists_tac \\ fs []);
 
-val lookup_vars_lemma = store_thm("lookup_vars_lemma",
-  ``!vs env1 env2. LIST_REL v_rel env1 env2 ==>
+Theorem lookup_vars_lemma:
+   !vs env1 env2. LIST_REL v_rel env1 env2 ==>
     case lookup_vars vs env1 of
       | NONE => lookup_vars vs env2 = NONE
-      | SOME l1 => ?l2. LIST_REL v_rel l1 l2 /\ lookup_vars vs env2 = SOME l2``,
+      | SOME l1 => ?l2. LIST_REL v_rel l1 l2 /\ lookup_vars vs env2 = SOME l2
+Proof
   Induct_on `vs` \\ fs [lookup_vars_def]
   \\ rpt strip_tac
   \\ imp_res_tac LIST_REL_LENGTH
@@ -196,28 +207,34 @@ val lookup_vars_lemma = store_thm("lookup_vars_lemma",
   \\ res_tac
   \\ Cases_on `lookup_vars vs env1`
   \\ fs []
-  \\ fs [LIST_REL_EL_EQN]);
+  \\ fs [LIST_REL_EL_EQN]
+QED
 
-val find_code_lemma = store_thm("find_code_lemma",
-  ``!s t p args. state_rel s t ==>
+Theorem find_code_lemma:
+   !s t p args. state_rel s t ==>
       find_code p args s.code = NONE /\
-      find_code p args t.code = NONE``,
-  fs [state_rel_def, find_code_def]);
+      find_code p args t.code = NONE
+Proof
+  fs [state_rel_def, find_code_def]
+QED
 
-val dest_closure_SOME_IMP = store_thm("dest_closure_SOME_IMP",
-  ``dest_closure max_app loc_opt f2 xs = SOME x ==>
+Theorem dest_closure_SOME_IMP:
+   dest_closure max_app loc_opt f2 xs = SOME x ==>
     (?loc arg_env clo_env num_args e. f2 = Closure loc arg_env clo_env num_args e) \/
-    (?loc arg_env clo_env fns i. f2 = Recclosure loc arg_env clo_env fns i)``,
-  fs [dest_closure_def,case_eq_thms] \\ rw [] \\ fs []);
+    (?loc arg_env clo_env fns i. f2 = Recclosure loc arg_env clo_env fns i)
+Proof
+  fs [dest_closure_def,case_eq_thms] \\ rw [] \\ fs []
+QED
 
-val dest_closure_SOME_Full_app = store_thm("dest_closure_SOME_Full_app",
-  ``v_rel f1 f2 /\ v_rel a1 a2 /\ LIST_REL v_rel args1 args2 /\
+Theorem dest_closure_SOME_Full_app:
+   v_rel f1 f2 /\ v_rel a1 a2 /\ LIST_REL v_rel args1 args2 /\
     dest_closure max_app loc_opt f1 (a1::args1) = SOME (Full_app exp1 env1 rest_args1) ==>
       ?exp2 env2 rest_args2.
       code_rel [exp1] [exp2] /\
       LIST_REL v_rel env1 env2 /\
       LIST_REL v_rel rest_args1 rest_args2 /\
-      dest_closure max_app loc_opt f2 (a2::args2) = SOME (Full_app exp2 env2 rest_args2)``,
+      dest_closure max_app loc_opt f2 (a2::args2) = SOME (Full_app exp2 env2 rest_args2)
+Proof
    rpt strip_tac
    \\ imp_res_tac dest_closure_SOME_IMP
    \\ rveq \\ fs [] \\ rveq
@@ -251,7 +268,17 @@ val dest_closure_SOME_Full_app = store_thm("dest_closure_SOME_Full_app",
           \\ irule EVERY2_TAKE
           \\ irule EVERY2_APPEND_suff \\ simp [])
    \\ irule EVERY2_DROP
-   \\ irule EVERY2_APPEND_suff \\ simp []);
+   \\ irule EVERY2_APPEND_suff \\ simp []
+QED
+
+val simple_state_rel = prove(
+  ``simple_state_rel v_rel state_rel``,
+  fs [simple_state_rel_def, state_rel_def]
+  \\ rw [] \\ fs [FMAP_REL_def, FLOOKUP_DEF]
+  \\ rfs []
+  \\ TRY (first_x_assum drule \\ fs [ref_rel_cases])
+  \\ fs [FAPPLY_FUPDATE_THM]
+  \\ rw [] \\ fs [ref_rel_cases]);
 
 val do_app_lemma = prove(
   ``state_rel s t /\ LIST_REL v_rel xs ys ==>
@@ -261,33 +288,42 @@ val do_app_lemma = prove(
       | Rval (x, s1) => ?y t1. v_rel x y /\ state_rel s1 t1 /\
                                do_app opp ys t = Rval (y, t1)``,
   match_mp_tac simple_val_rel_do_app
-  \\ conj_tac THEN1 (fs [simple_val_rel_def] \\ rw [] \\ fs [v_rel_cases])
-  \\ fs [simple_state_rel_def, state_rel_def]
-  \\ rw [] \\ fs [FMAP_REL_def, FLOOKUP_DEF]
-  \\ rfs []
-  \\ TRY (first_x_assum drule \\ fs [ref_rel_cases])
-  \\ fs [FAPPLY_FUPDATE_THM]
-  \\ rw [] \\ fs [ref_rel_cases]);
+  \\ fs [simple_val_rel_def, simple_state_rel] \\ rw [] \\ fs [v_rel_cases]);
+
+val do_install_lemma = prove(
+  ``state_rel s t /\ LIST_REL v_rel xs ys ==>
+    case do_install xs s of
+      | (Rerr err1, s1) => ?err2 t1. do_install ys t = (Rerr err2, t1) /\
+                            exc_rel v_rel err1 err2 /\ state_rel s1 t1
+      | (Rval exps1, s1) => ?exps2 t1. state_rel s1 t1 /\ (~ (exps1 = [])) /\
+                               code_rel exps1 exps2 /\
+                               do_install ys t = (Rval exps2, t1)``,
+  ho_match_mp_tac (Q.SPEC `compile_inc` simple_val_rel_do_install)
+  \\ fs [simple_state_rel, simple_compile_state_rel_def, state_rel_def]
+  \\ fs [compile_inc_def, pairTheory.FORALL_PROD, LENGTH_let_op, code_rel_def]
+  \\ fs [simple_val_rel_def, simple_state_rel] \\ rw [] \\ fs [v_rel_cases]
+  \\ EVAL_TAC \\ fs [FUN_EQ_THM]);
 
 (* evaluate_let_op *)
 
-val evaluate_let_op = store_thm("evaluate_let_op",
-  ``(!xs env1 (s1:('c,'ffi) closSem$state) res1 s2 ys env2 t1.
-       evaluate (xs, env1, s1) = (res1, s2) /\
-       LIST_REL v_rel env1 env2 /\ state_rel s1 t1 /\
-       code_rel xs ys ==>
-       ?res2 t2.
-         evaluate (ys, env2, t1) = (res2, t2) /\
-         result_rel (LIST_REL v_rel) v_rel res1 res2 /\
-         state_rel s2 t2) /\
-    (!loc_opt f1 args1 (s1:('c,'ffi) closSem$state) res1 s2 f2 args2 t1.
-       evaluate_app loc_opt f1 args1 s1 = (res1, s2) /\
-       v_rel f1 f2 /\ LIST_REL v_rel args1 args2 /\
-       state_rel s1 t1 ==>
-       ?res2 t2.
-         evaluate_app loc_opt f2 args2 t1 = (res2, t2) /\
-         result_rel (LIST_REL v_rel) v_rel res1 res2 /\
-         state_rel s2 t2)``,
+Theorem evaluate_let_op:
+  (!xs env1 (s1:('c,'ffi) closSem$state) res1 s2 ys env2 t1.
+      evaluate (xs, env1, s1) = (res1, s2) /\
+      LIST_REL v_rel env1 env2 /\ state_rel s1 t1 /\
+      code_rel xs ys ==>
+      ?res2 t2.
+        evaluate (ys, env2, t1) = (res2, t2) /\
+        result_rel (LIST_REL v_rel) v_rel res1 res2 /\
+        state_rel s2 t2) /\
+   (!loc_opt f1 args1 (s1:('c,'ffi) closSem$state) res1 s2 f2 args2 t1.
+      evaluate_app loc_opt f1 args1 s1 = (res1, s2) /\
+      v_rel f1 f2 /\ LIST_REL v_rel args1 args2 /\
+      state_rel s1 t1 ==>
+      ?res2 t2.
+        evaluate_app loc_opt f2 args2 t1 = (res2, t2) /\
+        result_rel (LIST_REL v_rel) v_rel res1 res2 /\
+        state_rel s2 t2)
+Proof
   ho_match_mp_tac (evaluate_ind |> Q.SPEC `\(x1,x2,x3). P0 x1 x2 x3`
                    |> Q.GEN `P0` |> SIMP_RULE std_ss [FORALL_PROD])
   \\ rpt strip_tac
@@ -403,78 +439,20 @@ val evaluate_let_op = store_thm("evaluate_let_op",
     \\ fs [case_eq_thms] \\ rveq \\ fs []
     \\ IF_CASES_TAC \\ rveq \\ fs []
     THEN1 (* Op = Install *)
-      (rveq \\ fs[])
-     (*
-     (drule EVERY2_REVERSE
-      \\ qabbrev_tac `a1 = REVERSE vs`
-      \\ qabbrev_tac `a2 = REVERSE v'`
-      \\ strip_tac
-      \\ qpat_x_assum `_ = (res1, s2)` mp_tac
-      \\ simp [Once do_install_def]
-      \\ Cases_on `a1`
-      THEN1 (fs [do_install_def] \\ rw [] \\ fs [])
-      \\ Cases_on `t`
-      THEN1 (fs [do_install_def] \\ rw [] \\ fs [])
-      \\ reverse (Cases_on `t'`)
-      THEN1 (fs [do_install_def] \\ rw [] \\ fs [])
-      \\ fs [] \\ rveq
-      \\ rename1 `v_rel x2 y2` \\ pop_assum mp_tac
-      \\ drule v_rel_IMP_v_to_bytes \\ strip_tac
-      \\ rename1 `v_rel x1 y1` \\ strip_tac
-      \\ drule v_rel_IMP_v_to_words \\ strip_tac \\ fs []
-      \\ Cases_on `v_to_bytes x1` \\ fs []
-      THEN1 (fs [do_install_def] \\ rw [] \\ fs [])
-      \\ Cases_on `v_to_words x2` \\ fs []
-      THEN1 (fs [do_install_def] \\ rw [] \\ fs [])
-      \\ pairarg_tac \\ fs []
-      \\ PairCases_on `progs`
-      \\ Cases_on `t2.compile_oracle 0`
-      \\ PairCases_on `r`
-      \\ `r1 = [] /\ progs1 = []` by
-         (fs [state_rel_def] \\ rfs [pure_co_def] \\ fs [compile_inc_def]
-          \\ rveq \\ fs [] \\ metis_tac [SND])
-      \\ rveq \\ fs []
-      \\ Cases_on `s'.compile cfg (progs0,[])` \\ fs []
-      THEN1 (fs [do_install_def] \\ rw []
-             \\ fs [state_rel_def,pure_cc_def,compile_inc_def]
-             \\ rfs [] \\ fs [] \\ rfs [pure_co_def,compile_inc_def])
-      \\ rename1 `_ = SOME xx` \\ PairCases_on `xx` \\ fs []
-      \\ reverse IF_CASES_TAC
-      THEN1 (fs [do_install_def] \\ rw []
-             \\ fs [state_rel_def,pure_cc_def,compile_inc_def]
-             \\ rfs [] \\ fs [] \\ rfs [pure_co_def,compile_inc_def]
-             \\ IF_CASES_TAC \\ fs [shift_seq_def]
-             \\ METIS_TAC[LENGTH_let_op,LENGTH_NIL])
-      \\ IF_CASES_TAC
-      THEN1 (fs [do_install_def] \\ strip_tac \\ rveq
-             \\ fs [state_rel_def,pure_cc_def,compile_inc_def]
-             \\ rfs [] \\ fs [] \\ rfs [pure_co_def,compile_inc_def]
-             \\ IF_CASES_TAC \\ fs [shift_seq_def]
-             \\ fs [FUPDATE_LIST, o_DEF]
-             \\ METIS_TAC[LENGTH_let_op,LENGTH_NIL])
-      \\ fs [] \\ rveq \\ fs []
-      \\ fs[CaseEq"prod"]
-      \\ fs [do_install_def] \\ strip_tac
-      \\ first_x_assum drule
-      \\ qmatch_goalsub_abbrev_tac `(Rval r0, tt)`
-      \\ disch_then (qspec_then `tt` mp_tac)
-      \\ impl_tac
-      THEN1 (qunabbrev_tac `tt`
-             \\ fs [state_rel_def, shift_seq_def, FUPDATE_LIST, o_DEF])
-      \\ strip_tac \\ fs []
-      \\ unabbrev_all_tac \\ fs []
-      \\ rw []
-      \\ fs [state_rel_def,pure_cc_def,compile_inc_def]
-      \\ rfs [] \\ fs [] \\ rfs [pure_co_def,compile_inc_def]
-      \\ fs [shift_seq_def]
-      \\ rveq \\ fs []
-      \\ reverse IF_CASES_TAC >- METIS_TAC[LENGTH_let_op,LENGTH_NIL]
-      \\ fs[]
-      \\ fs[CaseEq"semanticPrimitives$result"] \\ rveq \\ fs[]
-      \\ imp_res_tac evaluate_IMP_LENGTH
-      \\ Q.ISPEC_THEN`vs'`FULL_STRUCT_CASES_TAC SNOC_CASES
-      \\ fs[LIST_REL_SNOC])
-     *)
+     (drule EVERY2_REVERSE \\ disch_tac
+      \\ drule (GEN_ALL do_install_lemma)
+      \\ disch_then drule
+      \\ fs [CaseEq "prod"]
+      \\ TOP_CASE_TAC \\ rw [] \\ fs [] \\ rveq \\ fs []
+      \\ fs [CaseEq "prod"] \\ rfs []
+      \\ fs [code_rel_def]
+      \\ FIRST_X_ASSUM drule
+      \\ rw [] \\ fs []
+      \\ fs [CaseEq "prod", CaseEq "result"] \\ rveq \\ fs []
+      \\ ho_match_mp_tac LIST_REL_LAST
+      \\ fs []
+      \\ CCONTR_TAC
+      \\ fs [])
    (* op <> Install *)
    \\ drule EVERY2_REVERSE \\ disch_tac
    \\ drule (GEN_ALL do_app_lemma)
@@ -492,7 +470,7 @@ val evaluate_let_op = store_thm("evaluate_let_op",
     \\ rveq \\ fs [] \\ rveq \\ fs []
     \\ fs [Once case_eq_thms] \\ rveq
     THEN1 (fs [code_rel_def])
-    \\ drule (Q.SPEC `vs` lookup_vars_lemma)
+    \\ drule_then (qspec_then ‘vs’ mp_tac) lookup_vars_lemma
     \\ CASE_TAC \\ strip_tac
     \\ fs [] \\ rveq \\ fs [code_rel_def])
   THEN1 (* Letrec *)
@@ -516,7 +494,7 @@ val evaluate_let_op = store_thm("evaluate_let_op",
            \\ fs [EL_MAP]
            \\ pairarg_tac
            \\ fs [f_rel_def, code_rel_def])
-    \\ drule (Q.SPEC `x` lookup_vars_lemma)
+    \\ drule_then (qspec_then ‘x’ mp_tac) lookup_vars_lemma
     \\ CASE_TAC \\ fs [] \\ rveq \\ fs []
     \\ strip_tac \\ fs []
     \\ first_x_assum irule \\ fs []
@@ -571,7 +549,7 @@ val evaluate_let_op = store_thm("evaluate_let_op",
    (fs [dest_closure_def]
     \\ fs [case_eq_thms] \\ rveq \\ fs [] \\ rveq
     \\ imp_res_tac LIST_REL_LENGTH
-    \\ fs [PUSH_IF]
+    \\ fs [GSYM COND_RAND]
     \\ pairarg_tac \\ fs []
     \\ pairarg_tac \\ fs []
     \\ Cases_on `i < LENGTH funs2` \\ fs []
@@ -615,28 +593,32 @@ val evaluate_let_op = store_thm("evaluate_let_op",
   \\ unabbrev_all_tac \\ simp []
   \\ impl_tac THEN1 fs [dec_clock_def, state_rel_def]
   \\ strip_tac \\ fs []
-  \\ fs [case_eq_thms] \\ rveq \\ fs [])
+  \\ fs [case_eq_thms] \\ rveq \\ fs []
+QED
 
-val let_op_correct = Q.store_thm("let_op_correct",
-  `!xs env1 (s1:('c,'ffi) closSem$state) res1 s2 env2 t1.
+Theorem let_op_correct:
+   !xs env1 (s1:('c,'ffi) closSem$state) res1 s2 env2 t1.
        evaluate (xs, env1, s1) = (res1, s2) /\
        LIST_REL v_rel env1 env2 /\ state_rel s1 t1 ==>
        ?res2 t2.
          evaluate (let_op xs, env2, t1) = (res2, t2) /\
          result_rel (LIST_REL v_rel) v_rel res1 res2 /\
-         state_rel s2 t2`,
-  rpt strip_tac \\ drule (CONJUNCT1 evaluate_let_op) \\ simp [code_rel_def])
+         state_rel s2 t2
+Proof
+  rpt strip_tac \\ drule (CONJUNCT1 evaluate_let_op) \\ simp [code_rel_def]
+QED
 
 (* preservation of observational semantics *)
 
-val semantics_let_op = Q.store_thm("semantics_let_op",
-  `semantics (ffi:'ffi ffi_state) max_app FEMPTY
+Theorem semantics_let_op:
+   semantics (ffi:'ffi ffi_state) max_app FEMPTY
      co (pure_cc compile_inc cc) xs <> Fail ==>
    (!n. SND (SND (co n)) = []) /\ 1 <= max_app ==>
    semantics (ffi:'ffi ffi_state) max_app FEMPTY
      (pure_co compile_inc o co) cc (let_op xs) =
    semantics (ffi:'ffi ffi_state) max_app FEMPTY
-     co (pure_cc compile_inc cc) xs`,
+     co (pure_cc compile_inc cc) xs
+Proof
   strip_tac
   \\ ho_match_mp_tac IMP_semantics_eq
   \\ fs [] \\ fs [eval_sim_def] \\ rw []
@@ -650,7 +632,8 @@ val semantics_let_op = Q.store_thm("semantics_let_op",
   \\ qexists_tac `0` \\ simp []
   \\ fs [state_rel_def]
   \\ Cases_on `res1` \\ fs []
-  \\ Cases_on `e` \\ fs [])
+  \\ Cases_on `e` \\ fs []
+QED
 
 (* syntactic properties *)
 
@@ -671,8 +654,9 @@ val var_list_let_op_IMP_code_locs = prove(
   \\ Cases_on `l` \\ fs [let_op_def,var_list_def,code_locs_def]
   \\ every_case_tac \\ fs [var_list_def]);
 
-val code_locs_let_op = store_thm("code_locs_let_op",
-  ``!xs. code_locs (let_op xs) = code_locs xs``,
+Theorem code_locs_let_op:
+   !xs. code_locs (let_op xs) = code_locs xs
+Proof
   ho_match_mp_tac let_op_ind \\ rw []
   \\ fs [code_locs_def,let_op_def]
   THEN1
@@ -690,10 +674,12 @@ val code_locs_let_op = store_thm("code_locs_let_op",
   \\ Induct_on `fns` \\ fs [FORALL_PROD]
   \\ rw [] \\ fs []
   \\ once_rewrite_tac [code_locs_cons] \\ fs []
-  \\ metis_tac []);
+  \\ metis_tac []
+QED
 
-val let_op_every_Fn_SOME = Q.store_thm("let_op_every_Fn_SOME[simp]",
-  `∀es. every_Fn_SOME (let_op es) ⇔ every_Fn_SOME es`,
+Theorem let_op_every_Fn_SOME[simp]:
+   ∀es. every_Fn_SOME (let_op es) ⇔ every_Fn_SOME es
+Proof
   recInduct clos_letopTheory.let_op_ind
   \\ rw[clos_letopTheory.let_op_def]
   >- (
@@ -721,10 +707,12 @@ val let_op_every_Fn_SOME = Q.store_thm("let_op_every_Fn_SOME[simp]",
     \\ fs[EVERY_MEM,UNCURRY,MEM_MAP,PULL_EXISTS,FORALL_PROD]
     \\ simp[Once every_Fn_SOME_EVERY, SimpRHS]
     \\ simp[EVERY_MEM,MEM_MAP,PULL_EXISTS,FORALL_PROD]
-    \\ metis_tac[]));
+    \\ metis_tac[])
+QED
 
-val let_op_every_Fn_vs_NONE = Q.store_thm("let_op_every_Fn_vs_NONE[simp]",
-  `∀es. every_Fn_vs_NONE (let_op es) ⇔ every_Fn_vs_NONE es`,
+Theorem let_op_every_Fn_vs_NONE[simp]:
+   ∀es. every_Fn_vs_NONE (let_op es) ⇔ every_Fn_vs_NONE es
+Proof
   recInduct clos_letopTheory.let_op_ind
   \\ rw[clos_letopTheory.let_op_def]
   >- (
@@ -752,19 +740,25 @@ val let_op_every_Fn_vs_NONE = Q.store_thm("let_op_every_Fn_vs_NONE[simp]",
     \\ fs[EVERY_MEM,UNCURRY,MEM_MAP,PULL_EXISTS,FORALL_PROD]
     \\ simp[Once every_Fn_vs_NONE_EVERY, SimpRHS]
     \\ simp[EVERY_MEM,MEM_MAP,PULL_EXISTS,FORALL_PROD]
-    \\ metis_tac[]));
+    \\ metis_tac[])
+QED
 
-val EVERY_let_op_sing = store_thm("EVERY_let_op_sing",
-  ``EVERY f (let_op [x]) = f (HD (let_op [x]))``,
-  qspec_then`x`strip_assume_tac let_op_SING \\ fs []);
+Theorem EVERY_let_op_sing:
+   EVERY f (let_op [x]) = f (HD (let_op [x]))
+Proof
+  qspec_then`x`strip_assume_tac let_op_SING \\ fs []
+QED
 
-val var_list_no_Labels = store_thm("var_list_no_Labels",
-  ``!n l m. var_list n l m ==> EVERY no_Labels l /\ EVERY (obeys_max_app k) l``,
+Theorem var_list_no_Labels:
+   !n l m. var_list n l m ==> EVERY no_Labels l /\ EVERY (obeys_max_app k) l
+Proof
   Induct_on `l` \\ Cases_on `m` \\ fs [var_list_def]
-  \\ Cases \\ fs [var_list_def] \\ rw [] \\ res_tac \\ fs []);
+  \\ Cases \\ fs [var_list_def] \\ rw [] \\ res_tac \\ fs []
+QED
 
-val let_op_obeys_max_app = Q.store_thm("let_op_obeys_max_app",
-  `∀es. EVERY (obeys_max_app k) (let_op es) ⇔ EVERY (obeys_max_app k) es`,
+Theorem let_op_obeys_max_app:
+   ∀es. EVERY (obeys_max_app k) (let_op es) ⇔ EVERY (obeys_max_app k) es
+Proof
   recInduct clos_letopTheory.let_op_ind
   \\ rw[clos_letopTheory.let_op_def] \\ fs [EVERY_let_op_sing]
   \\ TRY CASE_TAC \\ fs [LENGTH_let_op]
@@ -775,10 +769,12 @@ val let_op_obeys_max_app = Q.store_thm("let_op_obeys_max_app",
     \\ metis_tac [var_list_no_Labels])
   \\ eq_tac \\ rw[]
   \\ fs [EVERY_MEM,MEM_MAP,FORALL_PROD,PULL_EXISTS]
-  \\ metis_tac []);
+  \\ metis_tac []
+QED
 
-val let_op_no_Labels = Q.store_thm("let_op_no_Labels",
-  `∀es. EVERY no_Labels (let_op es) ⇔ EVERY no_Labels es`,
+Theorem let_op_no_Labels:
+   ∀es. EVERY no_Labels (let_op es) ⇔ EVERY no_Labels es
+Proof
   recInduct clos_letopTheory.let_op_ind
   \\ rw[clos_letopTheory.let_op_def] \\ fs [EVERY_let_op_sing]
   \\ TRY CASE_TAC \\ fs []
@@ -788,16 +784,20 @@ val let_op_no_Labels = Q.store_thm("let_op_no_Labels",
     \\ qsuff_tac `EVERY no_Labels l` THEN1 metis_tac []
     \\ metis_tac [var_list_no_Labels])
   \\ fs [EVERY_MEM,MEM_MAP,FORALL_PROD,PULL_EXISTS]
-  \\ metis_tac []);
+  \\ metis_tac []
+QED
 
-val var_list_app_call_dests = Q.store_thm("var_list_app_call_dests",
-  `∀x y z. var_list x y z ⇒ app_call_dests a y = {}`,
+Theorem var_list_app_call_dests:
+   ∀x y z. var_list x y z ⇒ app_call_dests a y = {}
+Proof
   recInduct clos_letopTheory.var_list_ind
   \\ rw[clos_letopTheory.var_list_def]
-  \\ rw[Once app_call_dests_cons]);
+  \\ rw[Once app_call_dests_cons]
+QED
 
-val let_op_app_call_dests = Q.store_thm("let_op_app_call_dests[simp]",
-  `∀es. app_call_dests x (let_op es) = app_call_dests x es`,
+Theorem let_op_app_call_dests[simp]:
+   ∀es. app_call_dests x (let_op es) = app_call_dests x es
+Proof
   recInduct clos_letopTheory.let_op_ind
   \\ rw[clos_letopTheory.let_op_def]
   >- rw[Once closPropsTheory.app_call_dests_cons]
@@ -812,6 +812,30 @@ val let_op_app_call_dests = Q.store_thm("let_op_app_call_dests[simp]",
   \\ simp[app_call_dests_map]
   \\ AP_TERM_TAC \\ AP_TERM_TAC
   \\ simp[MAP_EQ_f, FORALL_PROD] \\ rw[]
-  \\ first_x_assum drule \\ rw[]);
+  \\ first_x_assum drule \\ rw[]
+QED
+
+Theorem var_list_code_labels_imp:
+   ∀n x y. var_list n x y ⇒ BIGUNION (set (MAP get_code_labels x)) = {}
+Proof
+  recInduct clos_letopTheory.var_list_ind
+  \\ rw[clos_letopTheory.var_list_def] \\ fs[]
+QED
+
+Theorem let_op_get_code_labels[simp]:
+   ∀es. MAP get_code_labels (clos_letop$let_op es) = MAP get_code_labels es
+Proof
+  recInduct clos_letopTheory.let_op_ind
+  \\ rw[clos_letopTheory.let_op_def] \\ fs[]
+  >- (
+    PURE_TOP_CASE_TAC \\ fs[]
+    \\ qmatch_assum_rename_tac`dest_op op _ = _`
+    \\ Cases_on`op` \\ fs[clos_letopTheory.dest_op_def] \\ rveq
+    \\ imp_res_tac var_list_code_labels_imp \\ fs[])
+  \\ fs[MAP_MAP_o, UNCURRY, o_DEF]
+  \\ AP_TERM_TAC \\ AP_TERM_TAC \\ AP_TERM_TAC
+  \\ simp[MAP_EQ_f, FORALL_PROD] \\ rw[]
+  \\ res_tac \\ fs[]
+QED
 
 val _ = export_theory();

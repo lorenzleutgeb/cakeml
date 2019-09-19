@@ -1,8 +1,13 @@
+(*
+  This compiler phase replaces tuples with constructors (with tag 0).
+*)
 open preamble astTheory terminationTheory flatLangTheory;
 
 val _ = numLib.prefer_num();
 
 val _ = new_theory "flat_uncheck_ctors";
+val _ = set_grammar_ancestry ["flatLang", "lib"];
+val _ = temp_tight_equality ();
 
 val compile_pat_def = tDefine "compile_pat" `
   (compile_pat flatLang$Pany = flatLang$Pany) ∧
@@ -54,33 +59,42 @@ val compile_def = tDefine "compile" `
 
 val compile_ind = theorem"compile_ind";
 
-val compile_length = Q.store_thm ("compile_length[simp]",
-  `! es. LENGTH (compile es) = LENGTH es`,
+Theorem compile_length[simp]:
+   ! es. LENGTH (compile es) = LENGTH es
+Proof
   ho_match_mp_tac compile_ind
-  \\ rw [compile_def]);
+  \\ rw [compile_def]
+QED
 
-val compile_sing = Q.store_thm ("compile_sing",
-  `! e. ?e2. compile [e] = [e2]`,
+Theorem compile_sing:
+   ! e. ?e2. compile [e] = [e2]
+Proof
   rw []
   \\ qspec_then `[e]` mp_tac compile_length
-  \\ simp_tac(std_ss++listSimps.LIST_ss)[LENGTH_EQ_NUM_compute]);
+  \\ simp_tac(std_ss++listSimps.LIST_ss)[LENGTH_EQ_NUM_compute]
+QED
 
 val compile_nil = save_thm ("compile_nil[simp]", EVAL ``compile []``);
 
-val compile_not_nil = Q.store_thm("compile_not_nil[simp]",
-  `compile [x] <> []`,
+Theorem compile_not_nil[simp]:
+   compile [x] <> []
+Proof
   strip_tac \\ pop_assum (mp_tac o Q.AP_TERM `LENGTH`)
-  \\ fs [compile_length]);
+  \\ fs [compile_length]
+QED
 
-val compile_cons = Q.store_thm ("compile_cons",
-  `! e es. compile (e::es) = HD (compile [e]) :: (compile es)`,
+Theorem compile_cons:
+   ! e es. compile (e::es) = HD (compile [e]) :: (compile es)
+Proof
   rw []
   \\ Cases_on `es`
   \\ rw [compile_def]
-  \\ METIS_TAC [compile_sing, HD]);
+  \\ METIS_TAC [compile_sing, HD]
+QED
 
-val compile_append = Q.store_thm("compile_append",
-  `!es es2. compile (es:flatLang$exp list ++ es2) = compile es ++ compile es2`,
+Theorem compile_append:
+   !es es2. compile (es:flatLang$exp list ++ es2) = compile es ++ compile es2
+Proof
   Induct >>
   rw [compile_def] >>
   Cases_on `es` >>
@@ -89,17 +103,22 @@ val compile_append = Q.store_thm("compile_append",
   Cases_on `es2` >>
   rw [] >>
   Cases_on `h` >>
-  rw [compile_def]);
+  rw [compile_def]
+QED
 
-val compile_reverse = Q.store_thm("compile_reverse",
-  `!es. compile (REVERSE es) = REVERSE (compile es:flatLang$exp list)`,
+Theorem compile_reverse:
+   !es. compile (REVERSE es) = REVERSE (compile es:flatLang$exp list)
+Proof
   ho_match_mp_tac compile_ind >>
-  rw [compile_def, compile_append]);
+  rw [compile_def, compile_append]
+QED
 
-val compile_HD_sing = Q.store_thm("compile_HD_sing",
-  `[HD (compile [e])] = compile [e:flatLang$exp]`,
+Theorem compile_HD_sing:
+   [HD (compile [e])] = compile [e:flatLang$exp]
+Proof
   qspec_then`e`strip_assume_tac compile_sing
-  \\ fs[]);
+  \\ fs[]
+QED
 
 val compile_decs = Define `
   (compile_decs [] = []) ∧

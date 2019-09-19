@@ -1,19 +1,12 @@
-open HolKernel Parse boolLib bossLib; val _ = new_theory "slr_parser_gen";
-
-open arithmeticTheory listTheory combinTheory stringTheory;
-
 (*
-
   The following definitions are from HOL4 sources found on Aditi
-  Barthwal's webpage:
-
-     http://users.cecs.anu.edu.au/~aditi/
-
+  Barthwal's webpage: http://users.cecs.anu.edu.au/~aditi/
   Her definitions are reproduced below so that we can try our
   hol2miniml translator on them.
-
 *)
-
+open HolKernel Parse boolLib bossLib;
+val _ = new_theory "slr_parser_gen";
+open arithmeticTheory listTheory combinTheory stringTheory;
 
 val push_def = Define `push l e = e::l`;
 
@@ -30,7 +23,9 @@ val take_def = Define `
   (take n l = if (LENGTH l >= n) then SOME (take1 n l)
                                  else NONE)`;
 
-val _ = Hol_datatype `symbol = TS of string | NTS of string`;
+Datatype:
+  symbol = TS string | NTS string
+End
 
 val isNonTmnlSym = Define `
   (isNonTmnlSym (NTS _) = T) /\
@@ -38,16 +33,30 @@ val isNonTmnlSym = Define `
 
 val sym2Str = Define `(sym2Str (TS s) = s) /\ (sym2Str (NTS s) = s)`;
 
-val _ = Hol_datatype `rule = rule of string => symbol list`;
+Datatype:
+  rule = rule string (symbol list)
+End
 
 val ruleRhs = Define `ruleRhs (rule l r) = r`;
 val ruleLhs = Define `ruleLhs (rule l r) = l`;
 
-val _ = Hol_datatype `ptree = Leaf of string | Node of string => ptree list`;
-val _ = Hol_datatype `grammar = G of rule list => string`;
-val _ = Hol_datatype `item = item of string => symbol list # symbol list`;
-val _ = type_abbrev ("state", ``:item list``)
-val _ = Hol_datatype `action = REDUCE of rule | GOTO of state | NA`
+Datatype:
+  ptree = Leaf string | Node string (ptree list)
+End
+
+Datatype:
+  grammar = G (rule list) string
+End
+
+Datatype:
+  item = item string (symbol list # symbol list)
+End
+
+Type state = ``:item list``
+
+Datatype:
+  action = REDUCE rule | GOTO state | NA
+End
 
 val ptree2Sym = Define `
   (ptree2Sym (Node nt ptl) = NTS nt) /\
@@ -173,8 +182,8 @@ val parser = Define `
     in
       case out of NONE => NONE
                 | (SOME (SOME (slo,[(st1,pt)],cs))) => SOME (SOME pt)
-	        | SOME (NONE) => SOME (NONE)
-	        | SOME _ => SOME NONE`
+                | SOME (NONE) => SOME (NONE)
+                | SOME _ => SOME NONE`
 
 
 val _ = export_theory ();

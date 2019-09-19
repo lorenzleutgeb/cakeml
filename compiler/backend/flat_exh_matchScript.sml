@@ -1,8 +1,13 @@
+(*
+  This compiler phase ensures that all pattern matches are exhaustive.
+*)
 open preamble flatLangTheory backend_commonTheory
 
-val _ = numLib.prefer_num()
-
 val _ = new_theory"flat_exh_match"
+
+val _ = set_grammar_ancestry ["flatLang", "sptree"];
+val _ = temp_tight_equality ();
+val _ = numLib.prefer_num()
 
 val _ = tDefine "is_unconditional" `
   is_unconditional p ⇔
@@ -132,14 +137,18 @@ val compile_exps_def = tDefine "compile_exps" `
 val _ = map delete_const ["e2sz","p2sz","l2sz","f2sz","e2sz_UNION"]
 val _ = delete_binding "e2sz_ind"
 
-val compile_exps_LENGTH = Q.store_thm("compile_exps_LENGTH",
-  `!ctors xs. LENGTH (compile_exps ctors xs) = LENGTH xs`,
-  ho_match_mp_tac (theorem "compile_exps_ind") \\ rw [compile_exps_def]);
+Theorem compile_exps_LENGTH:
+   !ctors xs. LENGTH (compile_exps ctors xs) = LENGTH xs
+Proof
+  ho_match_mp_tac (theorem "compile_exps_ind") \\ rw [compile_exps_def]
+QED
 
-val compile_exps_SING = Q.store_thm("compile_exps_SING[simp]",
-  `compile_exps ctors [x] <> []`,
+Theorem compile_exps_SING[simp]:
+   compile_exps ctors [x] <> []
+Proof
   strip_tac \\ pop_assum (mp_tac o Q.AP_TERM `LENGTH`)
-  \\ fs [compile_exps_LENGTH]);
+  \\ fs [compile_exps_LENGTH]
+QED
 
 val compile_exp_def = Define `
   compile_exp ctors exp = HD (compile_exps ctors [exp])`;
@@ -168,4 +177,3 @@ val compile_def = Define`
   compile = compile_decs init_ctors`;
 
 val _ = export_theory()
-

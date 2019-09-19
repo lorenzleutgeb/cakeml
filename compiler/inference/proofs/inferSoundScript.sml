@@ -1,3 +1,7 @@
+(*
+  Proves soundness of the type inferencer: any type assignment
+  produced by the type inferencer is a valid type for the program.
+*)
 open preamble
 open typeSystemTheory astTheory semanticPrimitivesTheory terminationTheory inferTheory unifyTheory infer_tTheory
      astPropsTheory inferPropsTheory typeSysPropsTheory infer_eSoundTheory envRelTheory type_eDetermTheory
@@ -67,16 +71,18 @@ val lookup_var_empty = Q.prove(`
   EVERY_CASE_TAC>>fs[tveLookup_def]);
 
 (* TODO: This should be generalized eventually *)
-val env_rel_complete_bind = Q.store_thm("env_rel_complete_bind",`
-  env_rel_complete FEMPTY ienv tenv Empty ⇒
-  env_rel_complete FEMPTY ienv tenv (bind_tvar tvs Empty)`,
+Theorem env_rel_complete_bind:
+    env_rel_complete FEMPTY ienv tenv Empty ⇒
+  env_rel_complete FEMPTY ienv tenv (bind_tvar tvs Empty)
+Proof
   rw[env_rel_complete_def,lookup_var_empty]>>res_tac>>fs[]
   >-
     metis_tac[]
   >>
   match_mp_tac tscheme_approx_weakening>>qexists_tac`0`>>
   HINT_EXISTS_TAC>>
-  fs[t_wfs_def]);
+  fs[t_wfs_def]
+QED
 
 (* TODO: The generated set of type identifiers (tids)
   must be related to st2.next_id in some way
@@ -93,12 +99,30 @@ val set_ids_eq = Q.prove(`
   rw[EQ_IMP_THM]>>
   qexists_tac`x-n1`>>fs[]);
 
-val set_ids_same = Q.store_thm("set_ids_same[simp]",
-  `set_ids x x = {}`,
-  rw[set_ids_eq]);
+Theorem set_ids_same[simp]:
+   set_ids x x = {}
+Proof
+  rw[set_ids_eq]
+QED
 
-val infer_d_sound = Q.store_thm ("infer_d_sound",
-  `(!d tenv ienv st1 st2 ienv'.
+Theorem set_ids_eq_union:
+   x <= y /\ y <= z ==> set_ids x z = set_ids x y UNION set_ids y z
+Proof
+  fs [set_ids_def, EXTENSION]
+QED
+
+Theorem set_ids_eq_union_eq:
+   x <= y /\ y <= z /\ s = set_ids y z
+    ==> set_ids x z = set_ids x y UNION s
+Proof
+  fs [set_ids_eq_union]
+QED
+
+fun str_tac strs = ConseqConv.CONSEQ_CONV_TAC
+  (ConseqConv.CONSEQ_REWRITE_CONV ([], strs, []));
+
+Theorem infer_d_sound:
+   (!d tenv ienv st1 st2 ienv'.
     infer_d ienv d st1 = (Success ienv', st2) ∧
     env_rel tenv ienv ∧
     start_type_id ≤ st1.next_id
@@ -109,42 +133,43 @@ val infer_d_sound = Q.store_thm ("infer_d_sound",
     env_rel tenv ienv ∧
     start_type_id ≤ st1.next_id
     ⇒
-    type_ds T tenv ds (set_ids st1.next_id st2.next_id) (ienv_to_tenv ienv'))`,
+    type_ds T tenv ds (set_ids st1.next_id st2.next_id) (ienv_to_tenv ienv'))
+Proof
   Induct
   >- (
     (* Dlet *)
     rw[infer_d_def,success_eqns]>>
     pairarg_tac \\ fs[success_eqns]
     \\ fs[init_state_def] \\ rveq
-    \\ drule (CONJUNCT1 infer_e_sound)
+    \\ old_drule (CONJUNCT1 infer_e_sound)
     \\ fs[init_state_def, env_rel_def]
     \\ imp_res_tac(CONJUNCT1 infer_e_wfs) \\ fs[]
-    \\ drule (CONJUNCT1 infer_p_sound)
+    \\ old_drule (CONJUNCT1 infer_p_sound)
     \\ simp[]
     \\ `(init_infer_state st1).next_uvar = 0` by (fs [init_infer_state_def] >> rw []) >>
-    drule (CONJUNCT1 infer_p_wfs) >>
-    disch_then drule >>
+    old_drule (CONJUNCT1 infer_p_wfs) >>
+    disch_then old_drule >>
     strip_tac >>
-    drule t_unify_wfs >>
-    disch_then drule >>
+    old_drule t_unify_wfs >>
+    disch_then old_drule >>
     strip_tac >>
-    drule (CONJUNCT1 infer_e_check_t) >>
+    old_drule (CONJUNCT1 infer_e_check_t) >>
     impl_tac >- fs [ienv_ok_def] >>
     strip_tac >>
-    drule (CONJUNCT1 infer_e_check_s) >>
+    old_drule (CONJUNCT1 infer_e_check_s) >>
     simp [] >>
     disch_then (qspec_then `0` mp_tac) >>
     impl_tac >- simp [check_s_def, init_infer_state_def] >>
     strip_tac >>
-    drule (CONJUNCT1 infer_p_check_t) >>
+    old_drule (CONJUNCT1 infer_p_check_t) >>
     strip_tac >>
-    drule (CONJUNCT1 infer_p_check_s) >>
+    old_drule (CONJUNCT1 infer_p_check_s) >>
     disch_then (qspec_then `0` mp_tac) >>
     impl_tac >- fs [ienv_ok_def] >>
     strip_tac >>
-    drule t_unify_check_s >>
+    old_drule t_unify_check_s >>
     simp [] >>
-    disch_then drule >>
+    disch_then old_drule >>
     simp [] >>
     impl_tac >- metis_tac [infer_p_next_uvar_mono, check_t_more4] >>
     strip_tac >>
@@ -157,27 +182,27 @@ val infer_d_sound = Q.store_thm ("infer_d_sound",
           sub_completion tvs st1'.next_uvar s ec1 last_sub`
      by (
        `tvs = tvs +0 ` by DECIDE_TAC>>pop_assum SUBST1_TAC>>
-       drule generalise_complete>>fs[]>>
+       old_drule generalise_complete>>fs[]>>
        fs[LAMBDA_PROD, EVERY_MAP] >>
        metis_tac[]) >>
-    drule sub_completion_unify2 >>
-    disch_then drule >>
+    old_drule sub_completion_unify2 >>
+    disch_then old_drule >>
     strip_tac >>
-    drule (CONJUNCT1 sub_completion_infer_p) >>
-    disch_then drule >>
+    old_drule (CONJUNCT1 sub_completion_infer_p) >>
+    disch_then old_drule >>
     strip_tac >>
     `env_rel_sound FEMPTY ienv tenv (bind_tvar tvs Empty)`
      by (
       `t_wfs FEMPTY` by rw [t_wfs_def]
       >> metis_tac [env_rel_sound_extend_tvs]) >>
-    drule env_rel_e_sound_empty_to >>
-    disch_then drule >>
-    disch_then drule >>
+    old_drule env_rel_e_sound_empty_to >>
+    disch_then old_drule >>
+    disch_then old_drule >>
     strip_tac >>
     strip_tac >>
-    disch_then drule >>
+    disch_then old_drule >>
     simp [] >>
-    disch_then drule >>
+    disch_then old_drule >>
     pop_assum (qspecl_then [`tenv`, `tvs`, `(t1,t2)::ec1`, `last_sub`] mp_tac) >>
     impl_tac
     >- fs [typeSoundInvariantsTheory.tenv_ok_def, env_rel_sound_def] >>
@@ -204,17 +229,17 @@ val infer_d_sound = Q.store_thm ("infer_d_sound",
         simp [MAP_MAP_o, combinTheory.o_DEF, LAMBDA_PROD, convert_env_def])
       >- (imp_res_tac infer_p_bindings >> fs [])
       >- (
-        drule (GEN_ALL env_rel_complete_bind) >>
+        old_drule (GEN_ALL env_rel_complete_bind) >>
         disch_then (qspec_then `tvs'` assume_tac) >>
-        drule (GEN_ALL infer_pe_complete) >>
+        old_drule (GEN_ALL infer_pe_complete) >>
         `ALL_DISTINCT (pat_bindings p [])` by
           (imp_res_tac type_p_pat_bindings>>
           `MAP FST bindings = pat_bindings p []` by
             (pop_assum sym_sub_tac>>
             simp[convert_env_def,MAP_MAP_o,MAP_EQ_f,FORALL_PROD])>>
           fs[])>>
-        rpt (disch_then drule) >>
-        disch_then (qspecl_then [`st1`,`SOME l`] mp_tac) >>
+        rpt (disch_then old_drule) >>
+        disch_then (qspecl_then [`st1`,`<| loc := SOME l; err := ienv.inf_t |>`] mp_tac) >>
         strip_tac >>
         rfs [] >>
         fs[] >>
@@ -328,14 +353,14 @@ val infer_d_sound = Q.store_thm ("infer_d_sound",
      >-
        (match_mp_tac (GEN_ALL infer_e_type_pe_determ)>>
        qexists_tac`st1` >>
-       qexists_tac `SOME l` >>
+       qexists_tac `<| loc := SOME l; err := ienv.inf_t |>` >>
        HINT_EXISTS_TAC>>fs[]>>
        imp_res_tac(CONJUNCT2 generalise_none)>>
        pop_assum(qspec_then`count st1'.next_uvar` mp_tac)>>
        impl_tac>>fs[EVERY_MAP,EVERY_MEM,FORALL_PROD]>>
        rw[]>>res_tac>>
        qpat_x_assum `t_wfs s` assume_tac>>
-       drule t_walkstar_check>>
+       old_drule t_walkstar_check>>
        disch_then match_mp_tac>>
        rw[]
        >- (match_mp_tac check_s_more5>>HINT_EXISTS_TAC>>fs[])
@@ -348,7 +373,7 @@ val infer_d_sound = Q.store_thm ("infer_d_sound",
   >- (
    rw[infer_d_def] >>
    fs[success_eqns] >>
-   rename1 `infer_funs (SOME loc) _ _ _ = _` >>
+   rename1 `infer_funs <| loc := SOME loc; err := ienv.inf_t |> _ _ _ = _` >>
    fs[init_state_def]>>
    pairarg_tac>>fs[success_eqns]>>rw[]>>
    `t_wfs (init_infer_state st1).subst` by rw [init_infer_state_def, t_wfs_def] >>
@@ -378,16 +403,16 @@ val infer_d_sound = Q.store_thm ("infer_d_sound",
        metis_tac[check_t_more])>>
    fs[Abbr`mapp`] >>
    (* properties of infer_e *)
-   drule (el 4 (CONJUNCTS infer_e_check_t))>>
+   old_drule (el 4 (CONJUNCTS infer_e_check_t))>>
    rfs[]>>strip_tac>>
-   drule (el 4 (CONJUNCTS infer_e_check_s))>>
+   old_drule (el 4 (CONJUNCTS infer_e_check_s))>>
    disch_then(qspec_then`0` mp_tac)>>
    impl_tac>-
      fs[ienv_ok_def,init_infer_state_def,check_s_def,env_rel_def]>>
    strip_tac>>
-   drule (el 4 (CONJUNCTS infer_e_next_uvar_mono))>>
+   old_drule (el 4 (CONJUNCTS infer_e_next_uvar_mono))>>
    simp[]>>strip_tac>>
-   drule generalise_complete>>fs[]>>
+   old_drule generalise_complete>>fs[]>>
    disch_then(qspec_then`st''''.next_uvar` mp_tac)>>
    impl_keep_tac
    >-
@@ -414,7 +439,7 @@ val infer_d_sound = Q.store_thm ("infer_d_sound",
      match_mp_tac env_rel_sound_extend_tvs>>fs[t_wfs_def])>>
    qabbrev_tac `tenv_v'' = bind_var_list 0 (convert_env last_sub bindings) (bind_tvar num_gen Empty)` >>
    `num_tvs tenv_v'' = num_gen` by (unabbrev_all_tac>>fs[bind_tvar_def])>>
-   drule (el 4 (CONJUNCTS infer_e_sound)) >> fs[] >>
+   old_drule (el 4 (CONJUNCTS infer_e_sound)) >> fs[] >>
    qmatch_asmsub_abbrev_tac`sub_completion num_gen _ _ constraints _`>>
    disch_then(qspecl_then[`tenv`,`tenv_v''`,`constraints`,`last_sub`] mp_tac)>>fs[]>>
    impl_tac>-
@@ -464,8 +489,8 @@ val infer_d_sound = Q.store_thm ("infer_d_sound",
      imp_res_tac type_funs_MAP_FST >>
      imp_res_tac type_funs_Tfn>>
      fs[env_rel_def] >>
-     drule (GEN_ALL infer_funs_complete)>>fs[]>>
-     disch_then (qspecl_then [`tvs'`,`tenv`,`st1`,`SOME loc`,`l`,`bindings'`] assume_tac)>>rfs[]>>
+     old_drule (GEN_ALL infer_funs_complete)>>fs[]>>
+     disch_then (qspecl_then [`tvs'`,`tenv`,`st1`,`<| loc := SOME loc; err := ienv.inf_t |>`,`l`,`bindings'`] assume_tac)>>rfs[]>>
      `st'.subst = st'''''.subst` by
        metis_tac[pure_add_constraints_functional]>>
      simp[LIST_REL_EL_EQN]>>
@@ -497,7 +522,8 @@ val infer_d_sound = Q.store_thm ("infer_d_sound",
        metis_tac[pure_add_constraints_success])>>
      rw[]>>
      (* This produces the appropriate substitution mentioned above *)
-     pop_assum (qspecl_then[`MAP (t_walkstar st'''''.subst) (MAP (λn. Infer_Tuvar n) (COUNT_LIST (LENGTH funs_ts)))`,`[]`,`FEMPTY`,`num_tvs tenv_v''`,`s`,`MAP (t_walkstar last_sub) funs_ts`] mp_tac)>>
+     pop_assum (qspecl_then[`MAP (t_walkstar st'''''.subst) (MAP (λn. Infer_Tuvar n) (COUNT_LIST (LENGTH funs_ts)))`,
+                            `[]`,`FEMPTY`,`num_tvs tenv_v''`,`s`,`MAP (t_walkstar last_sub) funs_ts`] mp_tac)>>
      fs[]>>
      impl_keep_tac
      >-
@@ -625,9 +651,26 @@ val infer_d_sound = Q.store_thm ("infer_d_sound",
     (* Dmod *)
     rw[infer_d_def,success_eqns]>>
     simp[Once type_d_cases]>>
-    first_x_assum drule>> disch_then drule>>fs[]>> strip_tac>>
+    first_x_assum old_drule>> disch_then old_drule>>fs[]>> strip_tac>>
     HINT_EXISTS_TAC>>fs[]>>
     simp[ienv_to_tenv_def,tenvLift_def,lift_ienv_def,nsLift_nsMap])
+  >- (
+    (* Dlocal *)
+    rw[infer_d_def, success_eqns]
+    >> rpt (first_x_assum old_drule >> rw [])
+    >> simp[Once type_d_cases]
+    >> goal_assum(first_assum o mp_then Any mp_tac)
+    >> str_tac [set_ids_eq_union_eq]
+    >> fs []
+    >> imp_res_tac infer_d_next_id_mono
+    >> fs []
+    >> first_x_assum (fn a =>
+      CHANGED_TAC (str_tac [a, env_rel_extend, env_rel_ienv_to_tenv]))
+    >> fs []
+    >> conj_tac
+    >- metis_tac [env_rel_def, infer_d_check]
+    >> fs [set_ids_def,EXTENSION,DISJOINT_DEF]
+  )
   >- (
     (* infer_ds [] *)
     fs[infer_d_def,success_eqns,env_rel_def]>>
@@ -638,8 +681,8 @@ val infer_d_sound = Q.store_thm ("infer_d_sound",
     fs[infer_d_def,success_eqns]>>
     rename1 `infer_d ienv1 _ _ = (Success ienv2, sti)` >>
     rename1 `infer_ds _ _ _ = (Success ienv3, _)` >>
-    rpt(first_x_assum drule)>>
-    rpt(disch_then drule)>>
+    rpt(first_x_assum old_drule)>>
+    rpt(disch_then old_drule)>>
     strip_tac>>strip_tac>>
     simp[Once type_d_cases] >>
     rw[]>>
@@ -659,10 +702,11 @@ val infer_d_sound = Q.store_thm ("infer_d_sound",
       fs[env_rel_def]>>
       metis_tac[infer_d_check])
     >>
-      fs[set_ids_def,EXTENSION,DISJOINT_DEF]));
+      fs[set_ids_def,EXTENSION,DISJOINT_DEF])
+QED
 
-val db_subst_infer_subst_swap2 = Q.store_thm ("db_subst_infer_subst_swap2",
-`(!t s tvs uvar n.
+Theorem db_subst_infer_subst_swap2:
+ (!t s tvs uvar n.
   t_wfs s ∧
   check_t tvs {} t
   ⇒
@@ -684,20 +728,23 @@ val db_subst_infer_subst_swap2 = Q.store_thm ("db_subst_infer_subst_swap2",
       ts =
    MAP (deBruijn_subst 0 (MAP (convert_t o t_walkstar s) (MAP (λn. Infer_Tuvar n) (COUNT_LIST tvs))) o
        convert_t)
-      ts))`,
+      ts))
+Proof
 ho_match_mp_tac infer_t_induction >>
 rw [convert_t_def, deBruijn_subst_def, EL_MAP, t_walkstar_eqn1,
     infer_deBruijn_subst_def, MAP_MAP_o, combinTheory.o_DEF, check_t_def,
-    LENGTH_COUNT_LIST]);
+    LENGTH_COUNT_LIST]
+QED
 
 (*
-val check_tscheme_inst_sound = Q.store_thm ("check_tscheme_inst_sound",
-  `!tvs_impl t_impl tvs_spec t_spec.
+Theorem check_tscheme_inst_sound:
+   !tvs_impl t_impl tvs_spec t_spec.
     check_t tvs_impl {} t_impl ∧
     check_t tvs_spec {} t_spec ∧
     check_tscheme_inst x (tvs_spec,t_spec) (tvs_impl,t_impl)
     ⇒
-    tscheme_inst (tvs_spec, convert_t t_spec) (tvs_impl, convert_t t_impl)`,
+    tscheme_inst (tvs_spec, convert_t t_spec) (tvs_impl, convert_t t_impl)
+Proof
   rw [check_tscheme_inst_def, tscheme_inst_def] >>
   every_case_tac >>
   fs [success_eqns] >>
@@ -706,11 +753,11 @@ val check_tscheme_inst_sound = Q.store_thm ("check_tscheme_inst_sound",
   var_eq_tac >>
   fs [] >>
   `t_wfs FEMPTY` by rw [t_wfs_def] >>
-  drule t_unify_apply >>
-  disch_then drule >>
+  old_drule t_unify_apply >>
+  disch_then old_drule >>
   rw [] >>
-  drule t_unify_wfs >>
-  disch_then drule >>
+  old_drule t_unify_wfs >>
+  disch_then old_drule >>
   strip_tac >>
   `t_walkstar s t_spec = t_spec` by metis_tac [t_walkstar_no_vars] >>
   fs [] >>
@@ -740,7 +787,7 @@ val check_tscheme_inst_sound = Q.store_thm ("check_tscheme_inst_sound",
   `FDOM (FEMPTY |++ s') = count tvs_impl DIFF FDOM s` by metis_tac [FDOM_FMAP] >>
   `check_s tvs_spec (count tvs_impl) s`
     by (
-     drule t_unify_check_s >>
+     old_drule t_unify_check_s >>
      simp [] >>
      disch_then irule >>
      simp [check_s_def, check_t_infer_db_subst2] >>
@@ -789,12 +836,14 @@ val check_tscheme_inst_sound = Q.store_thm ("check_tscheme_inst_sound",
     >- (
       imp_res_tac check_t_t_vars  >>
       fs [EXTENSION, SUBSET_DEF, COUNT_LIST_GENLIST, MAP_GENLIST] >>
-      metis_tac [])));
+      metis_tac []))
+QED
 
-val weak_tenv_ienv_to_tenv = Q.store_thm ("weak_tenv_ienv_to_tenv",
-  `!ienv1 ienv2.
+Theorem weak_tenv_ienv_to_tenv:
+   !ienv1 ienv2.
     ienv_ok {} ienv1 ∧ ienv_ok {} ienv2 ∧
-    check_weak_ienv ienv1 ienv2 ⇒ weak_tenv (ienv_to_tenv ienv1) (ienv_to_tenv ienv2)`,
+    check_weak_ienv ienv1 ienv2 ⇒ weak_tenv (ienv_to_tenv ienv1) (ienv_to_tenv ienv2)
+Proof
   rw [check_weak_ienv_def, weak_tenv_def, ienv_to_tenv_def, GSYM nsSub_compute_thm] >>
   simp [nsSub_nsMap] >>
   fs [tscheme_inst2_def] >>
@@ -808,21 +857,24 @@ val weak_tenv_ienv_to_tenv = Q.store_thm ("weak_tenv_ienv_to_tenv",
   fs [] >>
   rw [] >>
   fs [ienv_ok_def, ienv_val_ok_def] >>
-  drule nsLookup_nsAll >>
-  disch_then drule >>
+  old_drule nsLookup_nsAll >>
+  disch_then old_drule >>
   rw [] >>
   qpat_x_assum `nsAll _ ienv2.inf_v` mp_tac >>
-  drule nsLookup_nsAll >>
-  disch_then drule >>
+  old_drule nsLookup_nsAll >>
+  disch_then old_drule >>
   rw [] >>
-  metis_tac [check_tscheme_inst_sound]);
+  metis_tac [check_tscheme_inst_sound]
+QED
 
-val weak_decls_ienv_to_tenv = Q.store_thm ("weak_decls_ienv_to_tenv",
-  `!idecls1 idecls2.
-    check_weak_decls idecls1 idecls2 ⇒ weak_decls (convert_decls idecls1) (convert_decls idecls2)`,
+Theorem weak_decls_ienv_to_tenv:
+   !idecls1 idecls2.
+    check_weak_decls idecls1 idecls2 ⇒ weak_decls (convert_decls idecls1) (convert_decls idecls2)
+Proof
   rw [check_weak_decls_def, weak_decls_def, convert_decls_def, SUBSET_DEF,
       EVERY_MEM, list_subset_def, list_set_eq_def, EXTENSION] >>
-  metis_tac []);
+  metis_tac []
+QED
 
 val check_freevars_nub = Q.prove (
 `(!t x fvs.
@@ -850,7 +902,7 @@ val check_specs_sound = Q.prove (
     qexists_tac `<|inf_v := nsEmpty; inf_c := nsEmpty; inf_t := nsEmpty|>` >>
     rw [ienv_to_tenv_def, extend_dec_ienv_def, inf_env_component_equality])
   >- (
-    first_x_assum drule >>
+    first_x_assum old_drule >>
     rw [] >>
     qexists_tac `decls3` >>
     qmatch_assum_abbrev_tac
@@ -868,15 +920,15 @@ val check_specs_sound = Q.prove (
       conj_asm2_tac
       >- (
         rpt AP_TERM_TAC >>
-        drule check_freevars_type_name_subst >>
-        disch_then drule >>
-        disch_then drule >>
+        old_drule check_freevars_type_name_subst >>
+        disch_then old_drule >>
+        disch_then old_drule >>
         rw [convert_t_subst, LENGTH_COUNT_LIST, MAP_MAP_o, combinTheory.o_DEF,
             convert_t_def, MAP_GENLIST, COUNT_LIST_GENLIST])
       >- metis_tac [t_to_freevars_check, check_freevars_nub])
     >- metis_tac [GSYM nsAppend_assoc, nsAppend_nsSing])
   >- (
-    first_x_assum drule >>
+    first_x_assum old_drule >>
     impl_tac
     >- (
       irule tenv_abbrev_ok_merge >>
@@ -910,7 +962,7 @@ val check_specs_sound = Q.prove (
     simp [Once type_specs_cases, PULL_EXISTS] >>
     first_x_assum (qspec_then `nsBind tn (tvs,type_name_subst tenvT t) nsEmpty` mp_tac) >>
     simp [] >>
-    disch_then drule >>
+    disch_then old_drule >>
     impl_tac
     >- (
       fs [typeSoundInvariantsTheory.tenv_abbrev_ok_def] >>
@@ -927,7 +979,7 @@ val check_specs_sound = Q.prove (
     rw [ienv_to_tenv_def, extend_dec_ienv_def, extend_dec_tenv_def] >>
     metis_tac [nsAppend_nsSing, nsAppend_assoc])
   >- (
-    first_x_assum drule >>
+    first_x_assum old_drule >>
     rw [] >>
     simp [Once type_specs_cases, PULL_EXISTS] >>
     qmatch_assum_abbrev_tac
@@ -944,7 +996,7 @@ val check_specs_sound = Q.prove (
     simp [Once type_specs_cases, PULL_EXISTS] >>
     first_x_assum (qspec_then `nsBind tn (tvs,Tapp (MAP Tvar tvs) (TC_name (mk_id mn tn))) nsEmpty` mp_tac) >>
     simp [] >>
-    disch_then drule >>
+    disch_then old_drule >>
     impl_tac
     >- (
       fs [typeSoundInvariantsTheory.tenv_abbrev_ok_def] >>
@@ -960,12 +1012,13 @@ val check_specs_sound = Q.prove (
           union_decls_def, convert_decls_def] >>
     metis_tac [GSYM nsAppend_assoc, nsAppend_nsSing, INSERT_SING_UNION, UNION_ASSOC]));
 
-val infer_top_sound = Q.store_thm ("infer_top_sound",
-  `!idecls ienv top st1 idecls' ienv' st2 tenv.
+Theorem infer_top_sound:
+   !idecls ienv top st1 idecls' ienv' st2 tenv.
     infer_top idecls ienv top st1 = (Success (idecls',ienv'), st2) ∧
     env_rel tenv ienv
     ⇒
-    type_top T (convert_decls idecls) tenv top (convert_decls idecls') (ienv_to_tenv ienv')`,
+    type_top T (convert_decls idecls) tenv top (convert_decls idecls') (ienv_to_tenv ienv')
+Proof
   rw [] >>
   Cases_on `top` >>
   fs [infer_top_def, success_eqns, type_top_cases] >>
@@ -976,8 +1029,8 @@ val infer_top_sound = Q.store_thm ("infer_top_sound",
     pairarg_tac >>
     fs [success_eqns] >>
     rpt var_eq_tac >>
-    drule infer_ds_sound >>
-    disch_then drule >>
+    old_drule infer_ds_sound >>
+    disch_then old_drule >>
     rw [] >>
     rename1 `check_signature _ ienv.inf_t _ idecls2 ienv2 sig st2 =
                (Success (idecls3,ienv3), st3)` >>
@@ -1005,14 +1058,14 @@ val infer_top_sound = Q.store_thm ("infer_top_sound",
       irule weak_tenv_ienv_to_tenv >>
       fs [env_rel_def]
       >> conj_tac >- metis_tac [infer_ds_check] >>
-      drule infer_ds_check >>
+      old_drule infer_ds_check >>
       rw [] >>
-      drule check_specs_check >>
+      old_drule check_specs_check >>
       disch_then irule >>
       fs [ienv_ok_def, ienv_val_ok_def])
     >- metis_tac [weak_decls_ienv_to_tenv]
     >- (
-      drule check_specs_sound >>
+      old_drule check_specs_sound >>
       fs [env_rel_def, ienv_ok_def] >>
       rw [] >>
       fs [convert_decls_def, empty_inf_decls_def, extend_dec_ienv_def,
@@ -1026,14 +1079,16 @@ val infer_top_sound = Q.store_thm ("infer_top_sound",
     irule infer_d_sound >>
     rw [] >>
     fs [success_eqns] >>
-    metis_tac []));
+    metis_tac [])
+QED
 
-val infer_prog_sound = Q.store_thm ("infer_prog_sound",
-  `!idecls ienv prog st1 idecls' ienv' st2 tenv.
+Theorem infer_prog_sound:
+   !idecls ienv prog st1 idecls' ienv' st2 tenv.
     infer_prog idecls ienv prog st1 = (Success (idecls',ienv'), st2) ∧
     env_rel tenv ienv
     ⇒
-    type_prog T (convert_decls idecls) tenv prog (convert_decls idecls') (ienv_to_tenv ienv')`,
+    type_prog T (convert_decls idecls) tenv prog (convert_decls idecls') (ienv_to_tenv ienv')
+Proof
   induct_on `prog` >>
   rw [infer_prog_def, success_eqns]
   >- rw [empty_decls_def,convert_decls_def, empty_inf_decls_def]
@@ -1044,8 +1099,8 @@ val infer_prog_sound = Q.store_thm ("infer_prog_sound",
   pairarg_tac >>
   fs [success_eqns] >>
   rpt var_eq_tac >>
-  drule infer_top_sound >>
-  disch_then drule >>
+  old_drule infer_top_sound >>
+  disch_then old_drule >>
   strip_tac >>
   rename1 `infer_top idecls1 ienv1 _ _ = (Success (idecls2, ienv2), _)` >>
   rename1 `infer_prog _ _ _ _ = (Success (idecls3, ienv3), _)` >>
@@ -1058,7 +1113,8 @@ val infer_prog_sound = Q.store_thm ("infer_prog_sound",
   qexists_tac `extend_dec_ienv ienv2 ienv1` >>
   simp [] >>
   metis_tac [env_rel_extend, env_rel_ienv_to_tenv, env_rel_def,
-  infer_top_invariant]);
+  infer_top_invariant]
+QED
 *)
 
 val _ = export_theory ();

@@ -1,10 +1,13 @@
+(*
+  The wordLang intermediate language consists of structured programs
+  that overate over machine words, a list-like stack and a flat memory.
+  This is the language where register allocation is performed.
+*)
 open preamble asmTheory stackLangTheory;
 
 val _ = new_theory "wordLang";
 
-(* word lang = structured program with words, stack and memory *)
-
-val _ = Parse.type_abbrev("shift",``:ast$shift``);
+Type shift = ``:ast$shift``
 
 val _ = Datatype `
   exp = Const ('a word)
@@ -14,11 +17,13 @@ val _ = Datatype `
       | Op binop (exp list)
       | Shift shift exp num`
 
-val MEM_IMP_exp_size = Q.store_thm("MEM_IMP_exp_size",
-  `!xs a. MEM a xs ==> (exp_size l a < exp1_size l xs)`,
+Theorem MEM_IMP_exp_size:
+   !xs a. MEM a xs ==> (exp_size l a < exp1_size l xs)
+Proof
   Induct \\ FULL_SIMP_TAC (srw_ss()) []
   \\ REPEAT STRIP_TAC \\ SRW_TAC [] [definition"exp_size_def"]
-  \\ RES_TAC \\ DECIDE_TAC);
+  \\ RES_TAC \\ DECIDE_TAC
+QED
 
 val _ = Datatype `
   prog = Skip
@@ -265,6 +270,6 @@ val word_sh_def = Define `
       | Asr => SOME (w >> n)
       | Ror => SOME (word_ror w n)`;
 
-val _ = overload_on ("shift", “backend_common$word_shift”);
+Overload shift = “backend_common$word_shift”
 
 val _ = export_theory();

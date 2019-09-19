@@ -2,29 +2,16 @@
   Definitions and theorems supporting ml_progLib, which constructs a
   CakeML program and its semantic environment.
 *)
+
 open preamble
 open astTheory libTheory semanticPrimitivesTheory
      semanticPrimitivesPropsTheory evaluatePropsTheory;
 open mlstringTheory integerTheory;
 open terminationTheory;
 open namespaceTheory;
+open alist_treeTheory;
 
 val _ = new_theory "ml_prog";
-
-(* TODO: The translator might need a corresponding simplification for Longs too
-  Also, the translator should probably use a custom compset rather than [compute]
-  i.e. these automatic rewrites should be moved elsewhere
-*)
-val nsLookup_nsAppend_Short = Q.store_thm("nsLookup_nsAppend_Short[compute]",`
-  (nsLookup (nsAppend e1 e2) (Short id) =
-    case nsLookup e1 (Short id) of
-      NONE =>
-        nsLookup e2 (Short id)
-    | SOME v => SOME v)`,
-  every_case_tac>>
-  Cases_on`nsLookup e2(Short id)`>>
-  fs[namespacePropsTheory.nsLookup_nsAppend_some,
-     namespacePropsTheory.nsLookup_nsAppend_none,id_to_mods_def]);
 
 (* --- env operators --- *)
 
@@ -54,37 +41,154 @@ val merge_env_def = zDefine `
     <| v := nsAppend env2.v env1.v
      ; c := nsAppend env2.c env1.c|>`
 
-(* some theorems that can be used by EVAL to compute lookups *)
+(* the components of nsLookup are 'nicer' partial functions *)
 
-val write_simp = Q.store_thm("write_simp[compute]",
-  `(write n v env).c = env.c /\
-    nsLookup (write n v env).v (Short q) =
-      if n = q then SOME v else nsLookup env.v (Short q)`,
-  IF_CASES_TAC>>fs[write_def,namespacePropsTheory.nsLookup_nsBind]);
+val nsLookup_Short_def = zDefine `
+  nsLookup_Short ns nm = nsLookup ns (Short nm)`;
 
-val write_cons_simp = Q.store_thm("write_cons_simp[compute]",
-  `(write_cons n v env).v = env.v /\
-    nsLookup (write_cons n v env).c (Short q) =
-      if n = q then SOME v else nsLookup env.c (Short q)`,
-  IF_CASES_TAC>>fs[write_cons_def,namespacePropsTheory.nsLookup_nsBind]);
+val nsLookup_Mod1_def = zDefine `
+  nsLookup_Mod1 ns = (case ns of Bind _ ms => ALOOKUP ms)`;
 
-val write_mod_simp = Q.store_thm("write_mod_simp[compute]",
-  `(nsLookup (write_mod mn env env2).v (Short q) =
-    nsLookup env2.v (Short q)) ∧
-   (nsLookup (write_mod mn env env2).c (Short c) =
-    nsLookup env2.c (Short c)) ∧
-   (nsLookup (write_mod mn env env2).v (Long mn' r) =
-    if mn = mn' then nsLookup env.v r
-    else nsLookup env2.v (Long mn' r)) ∧
-   (nsLookup (write_mod mn env env2).c (Long mn' s) =
-    if mn = mn' then nsLookup env.c s
-    else nsLookup env2.c (Long mn' s))`,
-  rw[write_mod_def]);
+Theorem nsLookup_eq:
+   nsLookup ns (Short nm) = nsLookup_Short ns nm /\
+    nsLookup ns (Long mnm id) = (case nsLookup_Mod1 ns mnm of
+      NONE => NONE | SOME ns2 => nsLookup ns2 id)
+Proof
+  fs [nsLookup_Short_def]
+  \\ Cases_on `ns`
+  \\ fs[nsLookup_Mod1_def, nsLookup_def]
+QED
 
-val empty_simp = Q.store_thm("empty_simp[compute]",
-  `nsLookup empty_env.v q = NONE /\
-   nsLookup empty_env.c q = NONE`,
-  fs [empty_env_def] );
+(* base facts about the partial functions *)
+
+Theorem option_choice_f_apply:
+   option_choice_f f g x = OPTION_CHOICE (f x) (g x)
+Proof
+  fs [option_choice_f_def]
+QED
+
+Theorem nsLookup_Short_Bind:
+   nsLookup_Short (Bind ss ms) = ALOOKUP ss
+Proof
+  fs [nsLookup_Short_def, nsLookup_def, FUN_EQ_THM]
+QED
+
+Theorem nsLookup_Short_nsAppend:
+   nsLookup_Short (nsAppend ns1 ns2)
+    = option_choice_f (nsLookup_Short ns1) (nsLookup_Short ns2)
+Proof
+  Cases_on `ns1` \\ Cases_on `ns2`
+  \\ fs [nsLookup_Short_Bind, nsAppend_def,
+    alookup_append_option_choice_f]
+QED
+
+Theorem nsLookup_Mod1_Bind:
+   nsLookup_Mod1 (Bind ss ms) nm = ALOOKUP ms nm
+Proof
+  fs [nsLookup_Mod1_def]
+QED
+
+Theorem nsLookup_Mod1_nsAppend:
+   nsLookup_Mod1 (nsAppend ns1 ns2)
+    = option_choice_f (nsLookup_Mod1 ns1) (nsLookup_Mod1 ns2)
+Proof
+  Cases_on `ns1` \\ Cases_on `ns2`
+  \\ fs [nsLookup_Mod1_def, nsAppend_def,
+    alookup_append_option_choice_f]
+QED
+
+Theorem nsLookup_Short_nsLift:
+   nsLookup_Short (nsLift mnm ns) = ALOOKUP []
+Proof
+  Cases_on `ns` \\ fs [nsLift_def, nsLookup_Short_Bind]
+QED
+
+Theorem nsLookup_Mod1_nsLift:
+   nsLookup_Mod1 (nsLift mnm ns) = ALOOKUP [(mnm, ns)]
+Proof
+  Cases_on `ns` \\ fs [nsLift_def, nsLookup_Mod1_def]
+QED
+
+Theorem nsLookup_pf_nsBind:
+   nsLookup_Short (nsBind n v ns)
+        = option_choice_f (ALOOKUP [(n, v)]) (nsLookup_Short ns) /\
+  nsLookup_Mod1 (nsBind n v ns) = nsLookup_Mod1 ns
+Proof
+  Cases_on `ns`
+  \\ fs [nsLookup_Short_def,nsLookup_Mod1_def, FUN_EQ_THM,
+    write_def,nsLookup_def,nsBind_def,option_choice_f_def]
+  \\ rpt strip_tac
+  \\ fs [] \\ CASE_TAC \\ fs []
+QED
+
+(* equalities on these partial functions for the various env operators *)
+
+Theorem nsLookup_write_eqs:
+   nsLookup_Short ((write n v env).c) = nsLookup_Short env.c /\
+    nsLookup_Mod1 ((write n v env).c) = nsLookup_Mod1 env.c /\
+    nsLookup_Mod1 ((write n v env).v) = nsLookup_Mod1 env.v /\
+    nsLookup_Short ((write n v env).v) = option_choice_f (ALOOKUP [(n, v)])
+        (nsLookup_Short env.v)
+Proof
+  fs[write_def, nsLookup_pf_nsBind]
+QED
+
+Theorem nsLookup_write_cons_eqs:
+   nsLookup_Short ((write_cons n v env).v) = nsLookup_Short env.v /\
+    nsLookup_Mod1 ((write_cons n v env).v) = nsLookup_Mod1 env.v /\
+    nsLookup_Mod1 ((write_cons n v env).c) = nsLookup_Mod1 env.c /\
+    nsLookup_Short ((write_cons n v env).c) = option_choice_f (ALOOKUP [(n, v)])
+        (nsLookup_Short env.c)
+Proof
+  fs[write_cons_def, nsLookup_pf_nsBind]
+QED
+
+Theorem nsLookup_merge_env_eqs:
+   nsLookup_Short ((merge_env env env2).v)
+        = option_choice_f (nsLookup_Short env.v) (nsLookup_Short env2.v) /\
+    nsLookup_Mod1 ((merge_env env env2).v)
+        = option_choice_f (nsLookup_Mod1 env.v) (nsLookup_Mod1 env2.v) /\
+    nsLookup_Short ((merge_env env env2).c)
+        = option_choice_f (nsLookup_Short env.c) (nsLookup_Short env2.c) /\
+    nsLookup_Mod1 ((merge_env env env2).c)
+        = option_choice_f (nsLookup_Mod1 env.c) (nsLookup_Mod1 env2.c)
+Proof
+  fs[merge_env_def, nsLookup_Short_nsAppend, nsLookup_Mod1_nsAppend]
+QED
+
+Theorem nsLookup_write_mod_eqs:
+   nsLookup_Short ((write_mod mnm env env2).v) = nsLookup_Short env2.v /\
+    nsLookup_Mod1 ((write_mod mnm env env2).v)
+        = option_choice_f (ALOOKUP [(mnm, env.v)]) (nsLookup_Mod1 env2.v) /\
+    nsLookup_Short ((write_mod mnm env env2).c) = nsLookup_Short env2.c /\
+    nsLookup_Mod1 ((write_mod mnm env env2).c)
+        = option_choice_f (ALOOKUP [(mnm, env.c)]) (nsLookup_Mod1 env2.c)
+Proof
+  fs[write_mod_def, nsLookup_Short_nsAppend, nsLookup_Mod1_nsAppend,
+    nsLookup_Short_nsLift, nsLookup_Mod1_nsLift,
+    alookup_empty_option_choice_f]
+QED
+
+Theorem nsLookup_empty_eqs:
+   nsLookup_Short empty_env.v = ALOOKUP [] /\
+    nsLookup_Mod1 empty_env.v = ALOOKUP [] /\
+    nsLookup_Short empty_env.c = ALOOKUP [] /\
+    nsLookup_Mod1 empty_env.c = ALOOKUP []
+Proof
+  fs[empty_env_def, nsEmpty_def, nsLookup_Short_Bind, nsLookup_Mod1_def]
+QED
+
+(* nonsense theorem instantiated when env's are defined *)
+
+Theorem nsLookup_eq_format:
+   !env:v sem_env.
+     (nsLookup_Short env.v = nsLookup_Short env.v) /\
+     (nsLookup_Short env.c = nsLookup_Short env.c) /\
+     (nsLookup_Mod1 env.v = nsLookup_Mod1 env.v) /\
+     (nsLookup_Mod1 env.c = nsLookup_Mod1 env.c)
+Proof
+  rewrite_tac []
+QED
 
 (* some shorthands that are allowed to EVAL are below *)
 
@@ -92,14 +196,16 @@ val write_rec_def = Define `
   write_rec funs env1 env =
     FOLDR (\f env. write (FST f) (Recclosure env1 funs (FST f)) env) env funs`;
 
-val write_rec_thm = Q.store_thm("write_rec_thm",
-  `write_rec funs env1 env =
-    env with v := build_rec_env funs env1 env.v`,
+Theorem write_rec_thm:
+   write_rec funs env1 env =
+    env with v := build_rec_env funs env1 env.v
+Proof
   fs [write_rec_def,build_rec_env_def]
   \\ qspec_tac (`Recclosure env1 funs`,`hh`)
   \\ qspec_tac (`env`,`env`)
   \\ Induct_on `funs` \\ fs [FORALL_PROD]
-  \\ fs [write_def]);
+  \\ fs [write_def]
+QED
 
 val write_conses_def = Define `
   write_conses ([] :(tvarN, type_ident # stamp) alist) env = env /\
@@ -126,10 +232,12 @@ val write_tdefs_lemma = prove(
   \\ Q.SPEC_TAC (`REVERSE (build_constrs n p_2)`,`xs`)
   \\ Induct \\ fs [write_conses_def,FORALL_PROD,write_cons_def]);
 
-val write_tdefs_thm = store_thm("write_tdefs_thm",
-  ``write_tdefs n tds empty_env =
-    <|v := nsEmpty; c := build_tdefs n tds|>``,
-  fs [write_tdefs_lemma,empty_env_def,merge_env_def]);
+Theorem write_tdefs_thm:
+   write_tdefs n tds empty_env =
+    <|v := nsEmpty; c := build_tdefs n tds|>
+Proof
+  fs [write_tdefs_lemma,empty_env_def,merge_env_def]
+QED
 
 val merge_env_write_conses = prove(
   ``!xs env. merge_env (write_conses xs env1) env2 =
@@ -143,6 +251,64 @@ val merge_env_write_tdefs = prove(
       write_tdefs n tds (merge_env env1 env2)``,
   Induct \\ fs [write_tdefs_def,FORALL_PROD,merge_env_write_conses]);
 
+(* it's not clear if these are still needed, but ml_progComputeLib and
+   cfTacticsLib want them to be present. *)
+
+Theorem nsLookup_nsAppend_Short[compute]:
+    (nsLookup (nsAppend e1 e2) (Short id) =
+    case nsLookup e1 (Short id) of
+      NONE =>
+        nsLookup e2 (Short id)
+    | SOME v => SOME v)
+Proof
+  every_case_tac>>
+  Cases_on`nsLookup e2(Short id)`>>
+  fs[namespacePropsTheory.nsLookup_nsAppend_some,
+     namespacePropsTheory.nsLookup_nsAppend_none,id_to_mods_def]
+QED
+
+Theorem write_simp[compute]:
+   (write n v env).c = env.c /\
+    nsLookup (write n v env).v (Short q) =
+      if n = q then SOME v else nsLookup env.v (Short q)
+Proof
+  IF_CASES_TAC>>fs[write_def,namespacePropsTheory.nsLookup_nsBind]
+QED
+
+Theorem write_cons_simp[compute]:
+   (write_cons n v env).v = env.v /\
+    nsLookup (write_cons n v env).c (Short q) =
+      if n = q then SOME v else nsLookup env.c (Short q)
+Proof
+  IF_CASES_TAC>>fs[write_cons_def,namespacePropsTheory.nsLookup_nsBind]
+QED
+
+Theorem write_mod_simp[compute]:
+   (nsLookup (write_mod mn env env2).v (Short q) =
+    nsLookup env2.v (Short q)) ∧
+   (nsLookup (write_mod mn env env2).c (Short c) =
+    nsLookup env2.c (Short c)) ∧
+   (nsLookup (write_mod mn env env2).v (Long mn' r) =
+    if mn = mn' then nsLookup env.v r
+    else nsLookup env2.v (Long mn' r)) ∧
+   (nsLookup (write_mod mn env env2).c (Long mn' s) =
+    if mn = mn' then nsLookup env.c s
+    else nsLookup env2.c (Long mn' s))
+Proof
+  rw[write_mod_def]
+QED
+
+Theorem empty_simp[compute]:
+   nsLookup empty_env.v q = NONE /\
+   nsLookup empty_env.c q = NONE
+Proof
+  fs [empty_env_def]
+QED
+(* the components of nsLookup are 'nicer' partial functions *)
+
+
+
+
 (* --- declarations --- *)
 
 val Decls_def = Define `
@@ -151,33 +317,39 @@ val Decls_def = Define `
     ?ck1 ck2. evaluate_decs (s1 with clock := ck1) env ds =
                             (s2 with clock := ck2, Rval env2)`;
 
-val Decls_Dtype = Q.store_thm("Decls_Dtype",
-  `!env s tds env2 s2 locs.
+Theorem Decls_Dtype:
+   !env s tds env2 s2 locs.
       Decls env s [Dtype locs tds] env2 s2 <=>
       EVERY check_dup_ctors tds /\
       s2 = s with <| next_type_stamp := (s.next_type_stamp + LENGTH tds) |> /\
-      env2 = write_tdefs s.next_type_stamp tds empty_env`,
+      env2 = write_tdefs s.next_type_stamp tds empty_env
+Proof
   SIMP_TAC std_ss [Decls_def,evaluate_decs_def]
   \\ rw [] \\ eq_tac \\ rw [] \\ fs [bool_case_eq]
-  \\ rveq \\ fs [state_component_equality,write_tdefs_thm]);
+  \\ rveq \\ fs [state_component_equality,write_tdefs_thm]
+QED
 
-val Decls_Dexn = Q.store_thm("Decls_Dexn",
-  `!env s n l env2 s2 locs.
+Theorem Decls_Dexn:
+   !env s n l env2 s2 locs.
       Decls env s [Dexn locs n l] env2 s2 <=>
       s2 = s with <| next_exn_stamp := (s.next_exn_stamp + 1) |> /\
-      env2 = write_cons n (LENGTH l, ExnStamp s.next_exn_stamp) empty_env`,
+      env2 = write_cons n (LENGTH l, ExnStamp s.next_exn_stamp) empty_env
+Proof
   SIMP_TAC std_ss [Decls_def,evaluate_decs_def,write_cons_def]
   \\ rw [] \\ eq_tac \\ rw [] \\ fs [bool_case_eq]
   \\ rveq \\ fs [state_component_equality,write_tdefs_thm]
-  \\ fs [nsBind_def,nsEmpty_def,nsSing_def,empty_env_def]);
+  \\ fs [nsBind_def,nsEmpty_def,nsSing_def,empty_env_def]
+QED
 
-val Decls_Dtabbrev = Q.store_thm("Decls_Dtabbrev",
-  `!env s x y z env2 s2 locs.
+Theorem Decls_Dtabbrev:
+   !env s x y z env2 s2 locs.
       Decls env s [Dtabbrev locs x y z] env2 s2 <=>
-      s2 = s ∧ env2 = empty_env`,
+      s2 = s ∧ env2 = empty_env
+Proof
   fs [Decls_def,evaluate_decs_def]
   \\ rw [] \\ eq_tac \\ rw [] \\ fs [bool_case_eq]
-  \\ rveq \\ fs [state_component_equality,empty_env_def]);
+  \\ rveq \\ fs [state_component_equality,empty_env_def]
+QED
 
 val eval_rel_def = Define `
   eval_rel s1 env e s2 x <=>
@@ -186,16 +358,18 @@ val eval_rel_def = Define `
        evaluate (s1 with clock := ck1) env [e] =
                 (s2 with clock := ck2,Rval [x])`
 
-val eval_rel_alt = store_thm("eval_rel_alt",
-  ``eval_rel s1 env e s2 x <=>
+Theorem eval_rel_alt:
+   eval_rel s1 env e s2 x <=>
     s2.clock = s1.clock ∧
-    ∃ck. evaluate (s1 with clock := ck) env [e] = (s2,Rval [x])``,
+    ∃ck. evaluate (s1 with clock := ck) env [e] = (s2,Rval [x])
+Proof
   reverse eq_tac \\ rw [] \\ fs [eval_rel_def]
   THEN1 (qexists_tac `ck` \\ fs [state_component_equality])
   \\ drule evaluatePropsTheory.evaluate_set_clock \\ fs []
   \\ disch_then (qspec_then `s2.clock` strip_assume_tac)
   \\ rename [`evaluate (s1 with clock := ck) env [e]`]
-  \\ qexists_tac `ck` \\ fs [state_component_equality]);
+  \\ qexists_tac `ck` \\ fs [state_component_equality]
+QED
 
 val eval_list_rel_def = Define `
   eval_list_rel s1 env e s2 x <=>
@@ -213,10 +387,11 @@ val eval_match_rel_def = Define `
                 (s2 with clock := ck2,Rval [x])`
 
 (* Delays the write *)
-val Decls_Dlet = Q.store_thm("Decls_Dlet",
-  `!env s1 v e s2 env2 locs.
+Theorem Decls_Dlet:
+   !env s1 v e s2 env2 locs.
       Decls env s1 [Dlet locs (Pvar v) e] env2 s2 <=>
-      ?x. eval_rel s1 env e s2 x /\ (env2 = write v x empty_env)`,
+      ?x. eval_rel s1 env e s2 x /\ (env2 = write v x empty_env)
+Proof
   simp [Decls_def,evaluate_decs_def,eval_rel_def]
   \\ rw [] \\ eq_tac \\ rw [] \\ fs [bool_case_eq]
   THEN1
@@ -228,7 +403,8 @@ val Decls_Dlet = Q.store_thm("Decls_Dlet",
   \\ fs [pat_bindings_def,ALL_DISTINCT,MEM,
          pmatch_def,combine_dec_result_def]
   \\ qexists_tac `ck1` \\ qexists_tac `ck2`
-  \\ fs [write_def,empty_env_def]);
+  \\ fs [write_def,empty_env_def]
+QED
 
 val FOLDR_LEMMA = Q.prove(
   `!xs ys. FOLDR (\(x1,x2,x3) x4. (x1, f x1 x2 x3) :: x4) [] xs ++ ys =
@@ -236,12 +412,13 @@ val FOLDR_LEMMA = Q.prove(
   Induct \\ FULL_SIMP_TAC (srw_ss()) [FORALL_PROD]);
 
 (* Delays the write in build_rec_env *)
-val Decls_Dletrec = Q.store_thm("Decls_Dletrec",
-  `!env s1 funs s2 env2 locs.
+Theorem Decls_Dletrec:
+   !env s1 funs s2 env2 locs.
       Decls env s1 [Dletrec locs funs] env2 s2 <=>
       (s2 = s1) /\
       ALL_DISTINCT (MAP (\(x,y,z). x) funs) /\
-      (env2 = write_rec funs env empty_env)`,
+      (env2 = write_rec funs env empty_env)
+Proof
   simp [Decls_def,evaluate_decs_def,bool_case_eq,PULL_EXISTS]
   \\ rw [] \\ eq_tac \\ rw [] \\ fs []
   \\ fs [state_component_equality,write_rec_def]
@@ -250,32 +427,49 @@ val Decls_Dletrec = Q.store_thm("Decls_Dletrec",
   \\ qspec_tac (`Recclosure env funs`,`xx`)
   \\ qspec_tac (`nsEmpty:env_val`,`nn`)
   \\ Induct_on `funs` \\ fs [FORALL_PROD]
-  \\ pop_assum (assume_tac o GSYM) \\ fs []);
+  \\ pop_assum (assume_tac o GSYM) \\ fs []
+QED
 
-val Decls_Dmod = Q.store_thm("Decls_Dmod",
-  `Decls env1 s1 [Dmod mn ds] env2 s2 <=>
+Theorem Decls_Dmod:
+   Decls env1 s1 [Dmod mn ds] env2 s2 <=>
    ?s env.
       Decls env1 s1 ds env s /\ s2 = s /\
-      env2 = write_mod mn env empty_env`,
+      env2 = write_mod mn env empty_env
+Proof
   fs [Decls_def,Decls_def,evaluate_decs_def,PULL_EXISTS,
       combine_dec_result_def,write_mod_def,empty_env_def]
   \\ rw [] \\ eq_tac \\ rw [] \\ fs [pair_case_eq,result_case_eq]
-  \\ rveq \\ fs [] \\ asm_exists_tac \\ fs []);
+  \\ rveq \\ fs [] \\ asm_exists_tac \\ fs []
+QED
 
-val Decls_NIL = Q.store_thm("Decls_NIL",
-  `!env s n l env2 s2.
+Theorem Decls_Dlocal:
+   Decls env st lds env2 st2
+    ==> Decls (merge_env env2 env) st2 ds env3 st3
+    ==> Decls env st [Dlocal lds ds] env3 st3
+Proof
+  fs [Decls_def,evaluate_decs_def,extend_dec_env_def,merge_env_def]
+  \\ rw [pair_case_eq, result_case_eq]
+  \\ imp_res_tac evaluate_decs_set_clock
+  \\ fs [] \\ metis_tac []
+QED
+
+Theorem Decls_NIL:
+   !env s n l env2 s2.
       Decls env s [] env2 s2 <=>
-      s2 = s ∧ env2 = empty_env`,
+      s2 = s ∧ env2 = empty_env
+Proof
   fs [Decls_def,evaluate_decs_def,state_component_equality,empty_env_def]
-  \\ rw [] \\ eq_tac \\ rw []);
+  \\ rw [] \\ eq_tac \\ rw []
+QED
 
-val Decls_CONS = Q.store_thm("Decls_CONS",
-  `!s1 s3 env1 d ds1 ds2 env3.
+Theorem Decls_CONS:
+   !s1 s3 env1 d ds1 ds2 env3.
       Decls env1 s1 (d::ds2) env3 s3 =
       ?envA envB s2.
          Decls env1 s1 [d] envA s2 /\
          Decls (merge_env envA env1) s2 ds2 envB s3 /\
-         env3 = merge_env envB envA`,
+         env3 = merge_env envB envA
+Proof
   rw[Decls_def,PULL_EXISTS,evaluate_decs_def]
   \\ reverse (rw[EQ_IMP_THM]) \\ fs []
   THEN1
@@ -297,48 +491,73 @@ val Decls_CONS = Q.store_thm("Decls_CONS",
   \\ qexists_tac `s1'.clock` \\ fs [state_component_equality]
   \\ `(s1' with clock := s1'.clock) = s1'` by fs [state_component_equality]
   \\ fs [extend_dec_env_def]
-  \\ fs [state_component_equality]);
+  \\ fs [state_component_equality]
+QED
 
-val merge_env_empty_env = Q.store_thm("merge_env_empty_env",
-  `merge_env env empty_env = env /\
-   merge_env empty_env env = env`,
-  rw [merge_env_def,empty_env_def]);
+Theorem merge_env_empty_env:
+   merge_env env empty_env = env /\
+   merge_env empty_env env = env
+Proof
+  rw [merge_env_def,empty_env_def]
+QED
 
-val merge_env_assoc = Q.store_thm("merge_env_assoc",
-  `merge_env env1 (merge_env env2 env3) = merge_env (merge_env env1 env2) env3`,
-  fs [merge_env_def]);
+Theorem merge_env_assoc:
+   merge_env env1 (merge_env env2 env3) = merge_env (merge_env env1 env2) env3
+Proof
+  fs [merge_env_def]
+QED
 
-val Decls_APPEND = Q.store_thm("Decls_APPEND",
-  `!s1 s3 env1 ds1 ds2 env3.
+Theorem Decls_APPEND:
+   !s1 s3 env1 ds1 ds2 env3.
       Decls env1 s1 (ds1 ++ ds2) env3 s3 =
       ?envA envB s2.
          Decls env1 s1 ds1 envA s2 /\
          Decls (merge_env envA env1) s2 ds2 envB s3 /\
-         env3 = merge_env envB envA`,
+         env3 = merge_env envB envA
+Proof
   Induct_on `ds1` \\ fs [APPEND,Decls_NIL,merge_env_empty_env]
   \\ once_rewrite_tac [Decls_CONS]
-  \\ fs [PULL_EXISTS,merge_env_assoc] \\ metis_tac []);
+  \\ fs [PULL_EXISTS,merge_env_assoc] \\ metis_tac []
+QED
 
-val Decls_SNOC = Q.store_thm("Decls_SNOC",
-  `!s1 s3 env1 ds1 d env3.
+Theorem Decls_SNOC:
+   !s1 s3 env1 ds1 d env3.
       Decls env1 s1 (SNOC d ds1) env3 s3 =
       ?envA envB s2.
          Decls env1 s1 ds1 envA s2 /\
          Decls (merge_env envA env1) s2 [d] envB s3 /\
-         env3 = merge_env envB envA`,
-  METIS_TAC [SNOC_APPEND, Decls_APPEND]);
+         env3 = merge_env envB envA
+Proof
+  METIS_TAC [SNOC_APPEND, Decls_APPEND]
+QED
 
 
 (* The translator and CF tools use the following definition of ML_code
-   to build verified ML programs. *)
+   to build (and verify) an ML program within the logic. The goal is to
+   prove 'Decls' of the completed list of declarations. The program is
+   constructed one statement at a time, with facts about the resulting
+   environment built over time. There is a list of currently open blocks
+   (e.g. struct and local constructs) so that the contents of modules and
+   local objects can also be built up one statement at a time.
+*)
 
-val ML_code_def = Define `
-  (ML_code env1 s1 prog NONE env2 s2 <=>
-     Decls env1 s1 prog env2 s2) /\
-  (ML_code env1 s1 prog (SOME (mn:string,outside,env)) env2 s2 <=>
-     ?s.
-       Decls env1 s1 outside env s /\
-       Decls (merge_env env env1) s prog env2 s2)`
+val ML_code_env_def = Define `(ML_code_env env [] = env)
+    /\ (ML_code_env env ((comm, st, decls, res_env) :: bls)
+        = merge_env res_env (ML_code_env env bls))`;
+
+val ML_code_def = Define `(ML_code env [] res_st <=> T)
+    /\ (ML_code env
+        (((comment : string # string), st, decls, res_env) :: bls)
+        res_st <=> (ML_code env bls st
+            /\ Decls (ML_code_env env bls) st decls res_env res_st))`;
+
+(* retreive the Decls from a toplevel ML_code *)
+Theorem ML_code_Decls:
+   ML_code env1 [(comm, st1, prog, env2)] st2 ==>
+    Decls env1 st1 prog env2 st2
+Proof
+  fs [ML_code_def, ML_code_env_def]
+QED
 
 (* an empty program *)
 local open primSemEnvTheory in
@@ -353,82 +572,113 @@ local
     |> (SIMP_CONV std_ss [primSemEnvTheory.prim_sem_env_eq] THENC EVAL)
     |> concl |> rand
 in
-  val init_env_def = Define `
+  (* init_env_def should not be unpacked by EVAL. Queries will be handled
+     by the nsLookup_conv apparatus, which will use the pfun_eqs thm below. *)
+  val init_env_def = zDefine `
     init_env = ^init_env_tm`;
   val init_state_def = Define `
     init_state ffi = ^init_state_tm`;
 end
 
-val init_state_env_thm = Q.store_thm("init_state_env_thm",
-  `THE (prim_sem_env ffi) = (init_state ffi,init_env)`,
-  CONV_TAC(RAND_CONV EVAL) \\ rewrite_tac[prim_sem_env_eq,THE_DEF]);
+Theorem init_state_env_thm:
+   THE (prim_sem_env ffi) = (init_state ffi,init_env)
+Proof
+  rewrite_tac[prim_sem_env_eq,THE_DEF,init_state_def,init_env_def]
+QED
+
+val nsLookup_init_env_pfun_eqs = save_thm("nsLookup_init_env_pfun_eqs",
+  [``nsLookup_Short init_env.c``, ``nsLookup_Short init_env.v``,
+    ``nsLookup_Mod1 init_env.c``, ``nsLookup_Mod1 init_env.v``]
+  |> map (SIMP_CONV bool_ss
+        [init_env_def, nsLookup_Short_Bind, nsLookup_Mod1_def,
+            namespace_case_def, sem_env_accfupds, K_DEF])
+  |> LIST_CONJ);
 
 end
 
-val ML_code_NIL = Q.store_thm("ML_code_NIL",
-  `ML_code init_env (init_state ffi) [] NONE empty_env (init_state ffi)`,
-  fs [ML_code_def,Decls_NIL]);
-
-val nsLookup_init_env = save_thm("nsLookup_init_env[compute]",
-  init_env_def
-  |> concl
-  |> find_terms (can (match_term ``(s:string,_)``))
-  |> map (fn tm => EVAL ``nsLookup init_env.c (Short ^(rand(rator tm)))``)
-  |> LIST_CONJ);
+Theorem ML_code_NIL:
+   ML_code init_env [(("Toplevel", ""), init_state ffi, [], empty_env)]
+    (init_state ffi)
+Proof
+  fs [ML_code_def,Decls_NIL]
+QED
 
 (* opening and closing of modules *)
 
-val ML_code_new_module = Q.store_thm("ML_code_new_module",
-  `ML_code env1 s1 prog NONE env2 s2 ==>
-    !mn. ML_code env1 s1 [] (SOME (mn,prog,env2)) empty_env s2`,
-  fs [ML_code_def] \\ rw [Decls_NIL] \\ EVAL_TAC);
+Theorem ML_code_new_block:
+   !comm2. ML_code inp_env ((comm, st, decls, env) :: bls) st2 ==>
+    let env2 = ML_code_env inp_env ((comm, st, decls, env) :: bls) in
+    ML_code inp_env ((comm2, st2, [], empty_env)
+        :: (comm, st, decls, env) :: bls) st2
+Proof
+  fs [ML_code_def] \\ rw [Decls_NIL] \\ EVAL_TAC
+QED
 
-val ML_code_close_module = Q.store_thm("ML_code_close_module",
-  `ML_code env1 s1 prog (SOME (mn,ds,env)) env2 s2 ==>
-(* ∀sigs. *)
-      ML_code env1 s1 (SNOC (Dmod mn (* sigs *) prog) ds) NONE
-        (write_mod mn env2 env) s2`,
-  fs [ML_code_def] \\ rw [] \\ fs [SNOC_APPEND,Decls_APPEND]
+Theorem ML_code_close_module:
+   ML_code inp_env ((("Module", mn), m_i_st, m_decls, m_env)
+        :: (comm, st, decls, env) :: bls) st2
+    ==> let env2 = write_mod mn m_env env
+        in ML_code inp_env ((comm, st, SNOC (Dmod mn m_decls) decls,
+            env2) :: bls) st2
+Proof
+  rw [ML_code_def, ML_code_env_def]
+  \\ fs [SNOC_APPEND,Decls_APPEND]
   \\ asm_exists_tac \\ fs [Decls_Dmod,PULL_EXISTS]
-  \\ asm_exists_tac \\ fs []
-  \\ fs [write_mod_def,merge_env_def,empty_env_def]);
+  \\ asm_exists_tac
+  \\ fs [write_mod_def,merge_env_def,empty_env_def]
+QED
+
+Theorem ML_code_close_local:
+   ML_code inp_env ((("Local", ln2), l2_i_st, l2_decls, l2_env)
+        :: (("Local", ln1), l1_i_st, l1_decls, l1_env)
+        :: (comm, st, decls, env) :: bls) st2
+    ==> let env2 = merge_env l2_env env
+        in ML_code inp_env ((comm, st, SNOC (Dlocal l1_decls l2_decls) decls,
+            env2) :: bls) st2
+Proof
+  rw [ML_code_def, ML_code_env_def]
+  \\ fs [SNOC_APPEND,Decls_APPEND] \\ metis_tac [Decls_Dlocal]
+QED
 
 (* appending a Dtype *)
 
-val ML_code_Dtype = Q.store_thm("ML_code_Dtype",
-  `ML_code env1 s1 prog mn env2 s2 ==>
-   !tds locs.
+Theorem ML_code_Dtype:
+   !tds locs. ML_code inp_env ((comm, s1, prog, env2) :: bls) s2 ==>
      EVERY check_dup_ctors tds ==>
-     ML_code env1 s1 (SNOC (Dtype locs tds) prog) mn
-       (write_tdefs s2.next_type_stamp tds env2)
-       (s2 with next_type_stamp := s2.next_type_stamp + LENGTH tds)`,
-  Cases_on `mn` \\ TRY (PairCases_on `x`)
-  \\ fs [ML_code_def,SNOC_APPEND,Decls_APPEND,Decls_Dtype,merge_env_empty_env]
+     let nts = s2.next_type_stamp in
+     let s3 = (s2 with next_type_stamp := nts + LENGTH tds) in
+     let env3 = write_tdefs nts tds env2 in
+     ML_code inp_env ((comm, s1, SNOC (Dtype locs tds) prog, env3) :: bls) s3
+Proof
+  fs [ML_code_def,SNOC_APPEND,Decls_APPEND,Decls_Dtype,merge_env_empty_env]
   \\ rw [] \\ rpt (asm_exists_tac \\ fs [])
   \\ fs [merge_env_write_tdefs] \\ AP_TERM_TAC
-  \\ fs [merge_env_def,empty_env_def,sem_env_component_equality]);
+  \\ fs [merge_env_def,empty_env_def,sem_env_component_equality]
+QED
 
 (* appending a Dexn *)
 
-val ML_code_Dexn = Q.store_thm("ML_code_Dexn",
-  `ML_code env1 s1 prog mn env2 s2 ==>
-   !n l locs.
-     ML_code env1 s1 (SNOC (Dexn locs n l) prog) mn
-       (write_cons n (LENGTH l,ExnStamp s2.next_exn_stamp) env2)
-       (s2 with next_exn_stamp := s2.next_exn_stamp + 1)`,
-  Cases_on `mn` \\ TRY (PairCases_on `x`)
-  \\ fs [ML_code_def,SNOC_APPEND,Decls_APPEND,Decls_Dexn,merge_env_empty_env]
+Theorem ML_code_Dexn:
+   !n l locs. ML_code inp_env ((comm, s1, prog, env2) :: bls) s2 ==>
+     let nes = s2.next_exn_stamp in
+     let s3 = s2 with next_exn_stamp := nes + 1 in
+     let env3 = write_cons n (LENGTH l,ExnStamp nes) env2 in
+     ML_code inp_env ((comm, s1, SNOC (Dexn locs n l) prog, env3) :: bls) s3
+Proof
+  fs [ML_code_def,SNOC_APPEND,Decls_APPEND,Decls_Dexn,merge_env_empty_env]
   \\ rw [] \\ rpt (asm_exists_tac \\ fs [])
-  \\ fs [write_cons_def,merge_env_def,empty_env_def,sem_env_component_equality]);
+  \\ fs [write_cons_def,merge_env_def,empty_env_def,sem_env_component_equality]
+QED
 
 (* appending a Dtabbrev *)
 
-val ML_code_Dtabbrev = Q.store_thm("ML_code_Dtabbrev",
-  `ML_code env1 s1 prog mn env2 s2 ==>
-   !x y z locs.
-     ML_code env1 s1 (SNOC (Dtabbrev locs x y z) prog) mn env2 s2`,
-  Cases_on `mn` \\ TRY (PairCases_on `x`)
-  \\ fs [ML_code_def,SNOC_APPEND,Decls_APPEND,Decls_Dtabbrev,merge_env_empty_env]);
+Theorem ML_code_Dtabbrev:
+   !x y z locs. ML_code inp_env ((comm, s1, prog, env2) :: bls) s2 ==>
+     ML_code inp_env ((comm, s1, SNOC (Dtabbrev locs x y z) prog, env2) :: bls)
+       s2
+Proof
+  fs [ML_code_def,SNOC_APPEND,Decls_APPEND,Decls_Dtabbrev,merge_env_empty_env]
+QED
 
 (* appending a Letrec *)
 
@@ -439,45 +689,45 @@ val build_rec_env_APPEND = Q.prove(
   \\ qspec_tac (`add_to_env`,`xs`)
   \\ Induct_on `funs` \\ fs [FORALL_PROD]);
 
-val ML_code_env_def = Define `
-  (ML_code_env env1 NONE env2 = merge_env env2 env1) /\
-  (ML_code_env env1 (SOME (_,_,env)) env2 = merge_env env2 (merge_env env env1))`;
-
-val ML_code_Dletrec = Q.store_thm("ML_code_Dletrec",
-  `ML_code env1 s1 prog mn env2 s2 ==>
-    !fns locs.
+Theorem ML_code_Dletrec:
+   !fns locs. ML_code env0 ((comm, s1, prog, env2) :: bls) s2 ==>
       ALL_DISTINCT (MAP (λ(x,y,z). x) fns) ==>
-      ML_code env1 s1 (SNOC (Dletrec locs fns) prog) mn
-        (write_rec fns (ML_code_env env1 mn env2) env2) s2`,
-  Cases_on `mn` \\ TRY (PairCases_on `x`)
-  \\ fs [ML_code_def,SNOC_APPEND,Decls_APPEND,Decls_Dletrec]
-  \\ rw [] \\ rpt (asm_exists_tac \\ fs [ML_code_env_def])
+      let code_env = ML_code_env env0 ((comm, s1, prog, env2) :: bls) in
+      let env3 = write_rec fns code_env env2 in
+      ML_code env0 ((comm, s1, SNOC (Dletrec locs fns) prog, env3) :: bls) s2
+Proof
+  fs [ML_code_def,SNOC_APPEND,Decls_APPEND,Decls_Dletrec,ML_code_env_def]
+  \\ rw [] \\ asm_exists_tac
   \\ fs [merge_env_def,write_rec_thm,empty_env_def,sem_env_component_equality]
-  \\ fs [build_rec_env_APPEND]);
+  \\ fs [build_rec_env_APPEND]
+QED
 
 (* appending a Let *)
 
-val ML_code_Dlet_var = Q.store_thm("ML_code_Dlet_var",
-  `ML_code env1 s1 prog mn env2 s2 ==>
-    !e x s3.
-      eval_rel s2 (ML_code_env env1 mn env2) e s3 x ==>
-      !n locs.
-        ML_code env1 s1 (SNOC (Dlet locs (Pvar n) e) prog)
-          mn (write n x env2) s3`,
-  Cases_on `mn` \\ TRY (PairCases_on `x`)
-  \\ fs [ML_code_env_def]
-  \\ fs [ML_code_def,SNOC_APPEND,Decls_APPEND,Decls_Dlet]
+Theorem ML_code_Dlet_var:
+   !cenv e s3 x n locs. ML_code env0 ((comm, s1, prog, env1) :: bls) s2 ==>
+    eval_rel s2 cenv e s3 x ==>
+    cenv = ML_code_env env0 ((comm, s1, prog, env1) :: bls) ==>
+    let env2 = write n x env1 in let s3_abbrev = s3 in
+    ML_code env0 ((comm, s1, SNOC (Dlet locs (Pvar n) e) prog, env2)
+        :: bls) s3_abbrev
+Proof
+  fs [ML_code_def,ML_code_env_def,SNOC_APPEND,Decls_APPEND,Decls_Dlet]
   \\ rw [] \\ asm_exists_tac \\ fs [PULL_EXISTS]
-  \\ rw [] \\ rpt (asm_exists_tac \\ fs [])
-  \\ fs [write_def,merge_env_def,empty_env_def,sem_env_component_equality]);
+  \\ fs [write_def,merge_env_def,empty_env_def,sem_env_component_equality]
+QED
 
-val ML_code_Dlet_Fun = Q.store_thm("ML_code_Dlet_Fun",
-  `ML_code env1 s1 prog mn env2 s2 ==>
-    !n v e locs.
-      ML_code env1 s1 (SNOC (Dlet locs (Pvar n) (Fun v e)) prog)
-        mn (write n (Closure (ML_code_env env1 mn env2) v e) env2) s2`,
-  rw [] \\ match_mp_tac (ML_code_Dlet_var |> MP_CANON) \\ fs []
-  \\ fs [evaluate_def,state_component_equality,eval_rel_def]);
+Theorem ML_code_Dlet_Fun:
+   !n v e locs. ML_code env0 ((comm, s1, prog, env1) :: bls) s2 ==>
+    let code_env = ML_code_env env0 ((comm, s1, prog, env1) :: bls) in
+    let v_abbrev = Closure code_env v e in
+    let env2 = write n v_abbrev env1 in
+    ML_code env0 ((comm, s1, SNOC (Dlet locs (Pvar n) (Fun v e)) prog,
+        env2) :: bls) s2
+Proof
+  rw [] \\ imp_res_tac ML_code_Dlet_var
+  \\ fs [evaluate_def,state_component_equality,eval_rel_def]
+QED
 
 (* lookup function definitions *)
 
@@ -487,7 +737,9 @@ val lookup_var_def = Define `
 val lookup_cons_def = Define `
   lookup_cons name (env:v sem_env) = nsLookup env.c name`;
 
-(* theorems about lookup functions *)
+(* the old lookup formulation worked via nsLookup/mod_defined,
+   and mod_defined is still used in various characteristic scripts
+   so we supply an eval theorem that maps to the new approach. *)
 
 val mod_defined_def = zDefine `
   mod_defined env n =
@@ -495,41 +747,60 @@ val mod_defined_def = zDefine `
       p1 ≠ [] ∧ id_to_mods n = p1 ++ p2 ∧
       nsLookupMod env p1 = SOME e3`;
 
+Theorem mod_defined_nsLookup_Mod1[compute]:
+   mod_defined env id = (case id of Short _ => F
+        | Long mn _ => (case nsLookup_Mod1 env mn of NONE => F | _ => T))
+Proof
+  PURE_CASE_TAC \\ fs [id_to_mods_def, mod_defined_def]
+    \\ Cases_on `env`
+    \\ fs [Once EXISTS_LIST, nsLookupMod_def, nsLookup_Mod1_def]
+    \\ PURE_CASE_TAC \\ fs [Once EXISTS_LIST, nsLookupMod_def]
+QED
+
+(* theorems about old lookup functions *)
+(* FIXME: everything below this line is unlikely to be needed. *)
+
 val nsLookupMod_nsBind = Q.prove(`
   p ≠ [] ⇒
   nsLookupMod (nsBind k v env) p = nsLookupMod env p`,
   Cases_on`env`>>fs[nsBind_def]>> Induct_on`p`>>
   fs[nsLookupMod_def]);
 
-val nsLookup_write = Q.store_thm("nsLookup_write",
-  `(nsLookup (write n v env).v (Short name) =
+Theorem nsLookup_write:
+   (nsLookup (write n v env).v (Short name) =
        if n = name then SOME v else nsLookup env.v (Short name)) /\
    (nsLookup (write n v env).v (Long mn lname)  =
        nsLookup env.v (Long mn lname)) /\
    (nsLookup (write n v env).c a = nsLookup env.c a) /\
    (mod_defined (write n v env).v x = mod_defined env.v x) /\
-   (mod_defined (write n v env).c x = mod_defined env.c x)`,
-  fs [write_def] \\ EVAL_TAC \\ rw []
-  \\ metis_tac[nsLookupMod_nsBind,mod_defined_def]);
+   (mod_defined (write n v env).c x = mod_defined env.c x)
+Proof
+  fs [write_def] \\ rw []
+  \\ metis_tac[nsLookupMod_nsBind,mod_defined_def]
+QED
 
-val nsLookup_write_cons = Q.store_thm("nsLookup_write_cons",
-  `(nsLookup (write_cons n v env).v a = nsLookup env.v a) /\
+Theorem nsLookup_write_cons:
+   (nsLookup (write_cons n v env).v a = nsLookup env.v a) /\
    (nsLookup (write_cons n d env).c (Short name) =
      if name = n then SOME d else nsLookup env.c (Short name)) /\
    (mod_defined (write_cons n d env).v x = mod_defined env.v x) /\
    (mod_defined (write_cons n d env).c x = mod_defined env.c x) /\
    (nsLookup (write_cons n d env).c (Long mn lname) =
-    nsLookup env.c (Long mn lname))`,
-  fs [write_cons_def] \\ EVAL_TAC \\ rw [] \\
-  metis_tac[nsLookupMod_nsBind,mod_defined_def]);
+    nsLookup env.c (Long mn lname))
+Proof
+  fs [write_cons_def] \\ rw [] \\
+  metis_tac[nsLookupMod_nsBind,mod_defined_def]
+QED
 
-val nsLookup_empty = Q.store_thm("nsLookup_empty",
-  `(nsLookup empty_env.v a = NONE) /\
+Theorem nsLookup_empty:
+   (nsLookup empty_env.v a = NONE) /\
    (nsLookup empty_env.c b = NONE) /\
    (mod_defined empty_env.v x = F) /\
-   (mod_defined empty_env.c x = F)`,
-  EVAL_TAC \\ rw [mod_defined_def]
-  \\ Cases_on`p1`>>fs[nsLookupMod_def,empty_env_def]);
+   (mod_defined empty_env.c x = F)
+Proof
+  rw[empty_env_def, nsLookup_def, mod_defined_def,
+    nsLookupMod_def] \\ Cases_on`p1` \\ fs[]
+QED
 
 val nsLookupMod_nsAppend = Q.prove(`
   nsLookupMod (nsAppend env1 env2) p =
@@ -548,8 +819,8 @@ val nsLookupMod_nsAppend = Q.prove(`
   fs[namespacePropsTheory.nsLookupMod_nsAppend_none,namespacePropsTheory.nsLookupMod_nsAppend_some]>>
   metis_tac[option_CLAUSES]) |> GEN_ALL;
 
-val nsLookup_write_mod = Q.store_thm("nsLookup_write_mod",
-  `(nsLookup (write_mod mn env1 env2).v (Short n) =
+Theorem nsLookup_write_mod:
+   (nsLookup (write_mod mn env1 env2).v (Short n) =
     nsLookup env2.v (Short n)) /\
    (nsLookup (write_mod mn env1 env2).c (Short n) =
     nsLookup env2.c (Short n)) /\
@@ -563,7 +834,8 @@ val nsLookup_write_mod = Q.store_thm("nsLookup_write_mod",
       nsLookup env2.v (Long mn1 ln)) /\
    (nsLookup (write_mod mn env1 env2).c (Long mn1 ln) =
     if mn = mn1 then nsLookup env1.c ln else
-      nsLookup env2.c (Long mn1 ln))`,
+      nsLookup env2.c (Long mn1 ln))
+Proof
   fs [write_mod_def,mod_defined_def] \\
   EVAL_TAC \\
   fs[GSYM nsLift_def,id_to_mods_def,nsLookupMod_nsAppend] \\
@@ -584,10 +856,11 @@ val nsLookup_write_mod = Q.store_thm("nsLookup_write_mod",
     asm_exists_tac>>fs[namespacePropsTheory.nsLookupMod_nsLift,nsLookupMod_def]>>
     Cases_on`p1`>>fs[]>> rw[]>>
     Cases_on`p1'`>>fs[]>>
-    metis_tac[]));
+    metis_tac[])
+QED
 
-val nsLookup_merge_env = Q.store_thm("nsLookup_merge_env[compute]",
-  `(nsLookup (merge_env e1 e2).v (Short n) =
+Theorem nsLookup_merge_env:
+   (nsLookup (merge_env e1 e2).v (Short n) =
       case nsLookup e1.v (Short n) of
       | NONE => nsLookup e2.v (Short n)
       | SOME x => SOME x) /\
@@ -608,7 +881,8 @@ val nsLookup_merge_env = Q.store_thm("nsLookup_merge_env[compute]",
    (mod_defined (merge_env e1 e2).v x =
    (mod_defined e1.v x ∨ mod_defined e2.v x)) /\
    (mod_defined (merge_env e1 e2).c x =
-   (mod_defined e1.c x ∨ mod_defined e2.c x))`,
+   (mod_defined e1.c x ∨ mod_defined e2.c x))
+Proof
   fs [merge_env_def,mod_defined_def] \\ rw[] \\ every_case_tac
   \\ fs[namespacePropsTheory.nsLookup_nsAppend_some]
   THEN1 (Cases_on `nsLookup e2.v (Short n)`
@@ -677,23 +951,15 @@ val nsLookup_merge_env = Q.store_thm("nsLookup_merge_env[compute]",
       rename[`nsLookupMod _ xx`,`p1 ++ p2`,`xx ++ p3`] >>
       first_x_assum(qspecl_then[`xx`,`p3++p2`]mp_tac) >>
       fs[])
-  );
+QED
 
-val nsLookup_eq_format = Q.store_thm("nsLookup_eq_format",
-  `!env:v sem_env.
-     (nsLookup env.v (Short n) = nsLookup env.v (Short n)) /\
-     (nsLookup env.c (Short n) = nsLookup env.c (Short n)) /\
-     (nsLookup env.v (Long n1 n2) = nsLookup env.v (Long n1 n2)) /\
-     (nsLookup env.c (Long n1 n2) = nsLookup env.c (Long n1 n2)) /\
-     (mod_defined env.v (Long n1 n2) = mod_defined env.v (Long n1 n2)) /\
-     (mod_defined env.c (Long n1 n2) = mod_defined env.c (Long n1 n2))`,
-  rewrite_tac []);
-
-val nsLookup_nsBind_compute = Q.store_thm("nsLookup_nsBind_compute[compute]",
-  `(nsLookup (nsBind n v e) (Short n1) =
+Theorem nsLookup_nsBind_compute[compute]:
+   (nsLookup (nsBind n v e) (Short n1) =
     if n = n1 then SOME v else nsLookup e (Short n1)) /\
-   (nsLookup (nsBind n v e) (Long l1 l2) = nsLookup e (Long l1 l2))`,
-  rw [namespacePropsTheory.nsLookup_nsBind]);
+   (nsLookup (nsBind n v e) (Long l1 l2) = nsLookup e (Long l1 l2))
+Proof
+  rw [namespacePropsTheory.nsLookup_nsBind]
+QED
 
 val nsLookup_nsAppend = save_thm("nsLookup_nsAppend[compute]",
   nsLookup_merge_env
@@ -702,9 +968,11 @@ val nsLookup_nsAppend = save_thm("nsLookup_nsAppend[compute]",
   |> SIMP_RULE (srw_ss()) []);
 
 (* Base case for mod_defined (?) *)
-val mod_defined_base = store_thm("mod_defined_base[compute]",
-  ``mod_defined (Bind _ []) _ = F``,
-  rw[mod_defined_def]>>Cases_on`p1`>>EVAL_TAC);
+Theorem mod_defined_base[compute]:
+   mod_defined (Bind _ []) _ = F
+Proof
+  rw[mod_defined_def]>>Cases_on`p1`>>EVAL_TAC
+QED
 
 
 (* --- the rest of this file might be unused junk --- *)
@@ -712,59 +980,69 @@ val mod_defined_base = store_thm("mod_defined_base[compute]",
 (* misc theorems about lookup functions *)
 
 (* No idea why this is sparated out *)
-val lookup_var_write = Q.store_thm("lookup_var_write",
-  `(lookup_var v (write w x env) = if v = w then SOME x else lookup_var v env) /\
+Theorem lookup_var_write:
+   (lookup_var v (write w x env) = if v = w then SOME x else lookup_var v env) /\
     (nsLookup (write w x env).v (Short v)  =
        if v = w then SOME x else nsLookup env.v (Short v) ) /\
    (nsLookup (write w x env).v (Long mn lname)  =
        nsLookup env.v (Long mn lname)) ∧
-    (lookup_cons name (write w x env) = lookup_cons name env)`,
-  fs [lookup_var_def,write_def,lookup_cons_def] \\ rw []);
+    (lookup_cons name (write w x env) = lookup_cons name env)
+Proof
+  fs [lookup_var_def,write_def,lookup_cons_def] \\ rw []
+QED
 
-val lookup_var_write_mod = Q.store_thm("lookup_var_write_mod",
-  `(lookup_var v (write_mod mn e1 env) = lookup_var v env) /\
+Theorem lookup_var_write_mod:
+   (lookup_var v (write_mod mn e1 env) = lookup_var v env) /\
    (lookup_cons (Long mn1 (Short name)) (write_mod mn2 e1 env) =
     if mn1 = mn2 then
       lookup_cons (Short name) e1
     else
       lookup_cons (Long mn1 (Short name)) env) /\
    (lookup_cons (Short name) (write_mod mn2 e1 env) =
-    lookup_cons (Short name) env)`,
-  fs [lookup_var_def,write_mod_def, lookup_cons_def] \\ rw []);
+    lookup_cons (Short name) env)
+Proof
+  fs [lookup_var_def,write_mod_def, lookup_cons_def] \\ rw []
+QED
 
-val lookup_var_write_cons = Q.store_thm("lookup_var_write_cons",
-  `(lookup_var v (write_cons n d env) = lookup_var v env) /\
+Theorem lookup_var_write_cons:
+   (lookup_var v (write_cons n d env) = lookup_var v env) /\
    (lookup_cons (Short name) (write_cons n d env) =
      if name = n then SOME d else lookup_cons (Short name) env) /\
    (lookup_cons (Long l full_name) (write_cons n d env) =
     lookup_cons (Long l full_name) env) /\
-   (nsLookup (write_cons n d env).v x = nsLookup env.v x)`,
-  fs [lookup_var_def,write_cons_def,lookup_cons_def] \\ rw []);
+   (nsLookup (write_cons n d env).v x = nsLookup env.v x)
+Proof
+  fs [lookup_var_def,write_cons_def,lookup_cons_def] \\ rw []
+QED
 
-val lookup_var_empty_env = Q.store_thm("lookup_var_empty_env",
-  `(lookup_var v empty_env = NONE) /\
+Theorem lookup_var_empty_env:
+   (lookup_var v empty_env = NONE) /\
     (nsLookup empty_env.v (Short k) = NONE) /\
     (nsLookup empty_env.v (Long mn m) = NONE) /\
-    (lookup_cons name empty_env = NONE)`,
-  fs[lookup_var_def,empty_env_def,lookup_cons_def]);
+    (lookup_cons name empty_env = NONE)
+Proof
+  fs[lookup_var_def,empty_env_def,lookup_cons_def]
+QED
 
 (*
-val lookup_var_merge_env = Q.store_thm("lookup_var_merge_env",
-  `(lookup_var v1 (merge_env e1 e2) =
+Theorem lookup_var_merge_env:
+   (lookup_var v1 (merge_env e1 e2) =
        case lookup_var v1 e1 of
        | NONE => lookup_var v1 e2
        | res => res) /\
     (lookup_cons name (merge_env e1 e2) =
        case lookup_cons name e1 of
        | NONE => lookup_cons name e2
-       | res => res)`,
+       | res => res)
+Proof
   fs [lookup_var_def,lookup_cons_def,merge_env_def] \\ rw[] \\ every_case_tac \\
   fs[namespacePropsTheory.nsLookup_nsAppend_some]
   >-
     (Cases_on`nsLookup e2.v (Short v1)`>>
     fs[namespacePropsTheory.nsLookup_nsAppend_none,
        namespacePropsTheory.nsLookup_nsAppend_some,namespaceTheory.id_to_mods_def])
-  \\ cheat (* TODO *)));
+  \\ ... (* TODO *)
+QED);
 *)
 
 val _ = export_theory();

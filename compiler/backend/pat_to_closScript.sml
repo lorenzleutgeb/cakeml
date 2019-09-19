@@ -1,15 +1,15 @@
+(*
+  The translation from patLang to closLang is very simple.
+  Its main purpose is simplifying the semantics of some operations,
+  for example to explicitly raise an exception for Div so the semantics
+  in closLang can make more assumptions about the arguments.
+*)
 open preamble patLangTheory closLangTheory backend_commonTheory
 
 val _ = new_theory"pat_to_clos"
 val _ = set_grammar_ancestry ["patLang", "closLang", "backend_common"]
 
 val vector_tag_def = Define`vector_tag = 0:num`
-
-(* The translation from patLang to closLang is very simple.
-   Its main purpose is simplifying the semantics of some operations,
-   for example to explicitly raise an exception for Div so the semantics
-   in closLang can make more assumptions about the arguments.
-*)
 
 fun var_fun m n = ``closLang$Var (tra § ^(numSyntax.term_of_int(36+n))) ^(numSyntax.term_of_int(m-n))``;
 
@@ -175,6 +175,8 @@ val compile_def = tDefine"compile" `
          (Raise (tra§8) (Op (tra§9) (Cons subscript_tag) [])))) ∧
   (compile (App tra (Op Implode) es) =
     Op tra (FromListByte) (REVERSE (MAP compile es))) ∧
+  (compile (App tra (Op Explode) es) =
+    Op tra (ToListByte) (REVERSE (MAP compile es))) ∧
   (compile (App tra (Op Strlen) es) =
     Op tra LengthByteVec (REVERSE (MAP compile es))) ∧
   (compile (App tra (Op Strcat) es) =
@@ -250,7 +252,9 @@ val compile_def = tDefine"compile" `
   (compile (App tra (Op (FP_uop u)) es) =
     (Op tra (FP_uop u) (REVERSE (MAP compile es)))) /\
   (compile (App tra (Op (FP_bop b)) es) =
-    (Op tra (FP_bop b) (REVERSE (MAP compile es))))`
+    (Op tra (FP_bop b) (REVERSE (MAP compile es)))) /\
+  (compile (App tra (Op (FP_top t)) es) =
+    (Op tra (FP_top t) (REVERSE (MAP compile es))))`
   let
     val exp_size_def = patLangTheory.exp_size_def
   in

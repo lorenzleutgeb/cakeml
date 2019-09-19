@@ -1,3 +1,7 @@
+(*
+  This is an example of applying the translator to the Physicists
+  Heap algorithm from Chris Okasaki's book.
+*)
 open HolKernel Parse boolLib bossLib; val _ = new_theory "PhysicistsQueue";
 
 open listTheory arithmeticTheory ml_translatorLib ListProgTheory;
@@ -6,7 +10,9 @@ val _ = translation_extends "ListProg";
 
 (* implementation *)
 
-val _ = Hol_datatype `queue = QUEUE of 'a list => num => 'a list => num => 'a list`;
+Datatype:
+  queue = QUEUE ('a list) num ('a list) num ('a list)
+End
 
 val empty_def = mlDefine `
   empty = QUEUE [] 0 [] 0 []`;

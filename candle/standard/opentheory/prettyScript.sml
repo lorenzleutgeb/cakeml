@@ -1,11 +1,10 @@
-open preamble holSyntaxTheory mlstringTheory
+(*
+  A pretty printer producing strings.
+  Based on the pretty printer from "ML from the working programmer".
+*)
+open preamble holSyntaxTheory holKernelTheory mlstringTheory
 
 val _ = new_theory "pretty";
-
-(* ------------------------------------------------------------------------- *)
-(* A pretty printer producing strings.                                       *)
-(* Based on the pretty printer from "ML from the working programmer".        *)
-(* ------------------------------------------------------------------------- *)
 
 val _ = Datatype `
   t = Block (t list) num num
@@ -59,9 +58,9 @@ val mk_blo_def = Define `
 
 val pp_margin_def = Define `pp_margin = 78n`;
 
-val _ = temp_overload_on ("space", ``(strlit" ")``);
-val _ = temp_overload_on ("lpar", ``(strlit"(")``);
-val _ = temp_overload_on ("rpar", ``(strlit")")``);
+Overload space[local] = ``(strlit" ")``
+Overload lpar[local] = ``(strlit"(")``
+Overload rpar[local] = ``(strlit")")``
 
 (* ------------------------------------------------------------------------- *)
 (* A pretty printer for HOL types.                                           *)
@@ -190,13 +189,15 @@ val collect_vars_def = Define `
           (v::vs, b)
     | _ => ([], tm)`;
 
-val collect_vars_term_size = Q.store_thm("collect_vars_term_size",
-  `term_size (SND (collect_vars tm)) <= term_size tm`,
+Theorem collect_vars_term_size:
+   term_size (SND (collect_vars tm)) <= term_size tm
+Proof
   Induct_on `tm`
   \\ rw [Once collect_vars_def, term_size_def]
   \\ PURE_CASE_TAC \\ fs []
   \\ TRY pairarg_tac \\ fs []
-  \\ rw [term_size_def]);
+  \\ rw [term_size_def]
+QED
 
 val dest_binary_def = Define `
   dest_binary nm tm =
@@ -209,20 +210,23 @@ val dest_binary_def = Define `
             (l::ls, r)
     | _ => ([], tm)`;
 
-val dest_binary_term_size = Q.store_thm("dest_binary_term_size",
-  `term_size (SND (dest_binary nm tm)) <= term_size tm`,
+Theorem dest_binary_term_size:
+   term_size (SND (dest_binary nm tm)) <= term_size tm
+Proof
   Induct_on `tm`
   \\ rw [Once dest_binary_def, term_size_def]
   \\ PURE_CASE_TAC \\ fs [] \\ rw [term_size_def]
   \\ PURE_CASE_TAC \\ fs [] \\ rw [term_size_def]
-  \\ fs [UNCURRY]);
+  \\ fs [UNCURRY]
+QED
 
-val dest_binary_MEM_term_size = Q.store_thm("dest_binary_MEM_term_size",
-  `!nm tm ts t q.
+Theorem dest_binary_MEM_term_size:
+   !nm tm ts t q.
      MEM t ts /\
      dest_binary nm tm = (ts, q)
      ==>
-     term_size t < term_size tm`,
+     term_size t < term_size tm
+Proof
   recInduct (theorem "dest_binary_ind")
   \\ rpt gen_tac \\ strip_tac
   \\ Induct
@@ -234,7 +238,8 @@ val dest_binary_MEM_term_size = Q.store_thm("dest_binary_MEM_term_size",
   \\ rw []
   \\ pairarg_tac \\ fs [] \\ rw []
   \\ rw [term_size_def]
-  \\ res_tac \\ fs []);
+  \\ res_tac \\ fs []
+QED
 
 val dest_binder_def = Define `
   dest_binder nm tm =
@@ -247,8 +252,9 @@ val dest_binder_def = Define `
             (v::vs, r)
     | _ => ([], tm)`;
 
-val dest_binder_term_size = Q.store_thm("dest_binder_term_size",
-  `!nm tm vs b. dest_binder nm tm = (vs, b) ==> term_size b <= term_size tm`,
+Theorem dest_binder_term_size:
+   !nm tm vs b. dest_binder nm tm = (vs, b) ==> term_size b <= term_size tm
+Proof
   recInduct (theorem "dest_binder_ind")
   \\ rw []
   \\ pop_assum mp_tac
@@ -256,7 +262,8 @@ val dest_binder_term_size = Q.store_thm("dest_binder_term_size",
   \\ rpt (PURE_TOP_CASE_TAC \\ fs [])
   \\ pairarg_tac
   \\ rw [term_size_def]
-  \\ fs []);
+  \\ fs []
+QED
 
 (* ------------------------------------------------------------------------- *)
 (* A pretty printer for terms.                                               *)
@@ -404,20 +411,22 @@ val thm2str_def = Define `
 val _ = patternMatchesLib.ENABLE_PMATCH_CASES ();
 val PMATCH_ELIM_CONV = patternMatchesLib.PMATCH_ELIM_CONV;
 
-val is_binop_PMATCH = Q.store_thm("is_binop_PMATCH",
-  `!tm.
+Theorem is_binop_PMATCH:
+   !tm.
      is_binop tm =
        case tm of
          Comb (Comb (Const con _) _) _ =>
            (case fixity_of con of
               right _ => T
             | _ => F)
-       | _ => F`,
+       | _ => F
+Proof
   CONV_TAC (DEPTH_CONV PMATCH_ELIM_CONV)
-  \\ simp [is_binop_def]);
+  \\ simp [is_binop_def]
+QED
 
-val is_binder_PMATCH = Q.store_thm("is_binder_PMATCH",
-  `!tm.
+Theorem is_binder_PMATCH:
+   !tm.
      is_binder tm =
        case tm of
          Comb (Const nm _) (Abs (Var _ _) _) =>
@@ -425,42 +434,50 @@ val is_binder_PMATCH = Q.store_thm("is_binder_PMATCH",
            nm = strlit"Data.Bool.!" \/
            nm = strlit"Data.Bool.?!" \/
            nm = strlit"@"
-       | _ => F`,
+       | _ => F
+Proof
   CONV_TAC (DEPTH_CONV PMATCH_ELIM_CONV)
-  \\ simp [is_binder_def]);
+  \\ simp [is_binder_def]
+QED
 
-val is_cond_PMATCH = Q.store_thm("is_cond_PMATCH",
-  `!tm.
+Theorem is_cond_PMATCH:
+   !tm.
      is_cond tm =
        case tm of
          Comb (Comb (Comb (Const con _) _) _) _ =>
            con = strlit"Data.Bool.cond"
-       | _ => F`,
+       | _ => F
+Proof
   CONV_TAC (DEPTH_CONV PMATCH_ELIM_CONV)
-  \\ simp [is_cond_def]);
+  \\ simp [is_cond_def]
+QED
 
-val is_neg_PMATCH = Q.store_thm("is_neg_PMATCH",
-  `!tm.
+Theorem is_neg_PMATCH:
+   !tm.
      is_neg tm =
        case tm of
          Comb (Const nm _) _ => nm = strlit"Data.Bool.~"
-       | _ => F`,
+       | _ => F
+Proof
   CONV_TAC (DEPTH_CONV PMATCH_ELIM_CONV)
-  \\ simp [is_neg_def]);
+  \\ simp [is_neg_def]
+QED
 
-val collect_vars_PMATCH = Q.store_thm("collect_vars_PMATCH",
-  `!tm.
+Theorem collect_vars_PMATCH:
+   !tm.
      collect_vars tm =
        case tm of
          Abs (Var v ty) r =>
            let (vs, b) = collect_vars r in
              (v::vs, b)
-       | _ => ([], tm)`,
+       | _ => ([], tm)
+Proof
   CONV_TAC (DEPTH_CONV PMATCH_ELIM_CONV)
-  \\ simp [Once collect_vars_def]);
+  \\ simp [Once collect_vars_def]
+QED
 
-val dest_binary_PMATCH = Q.store_thm("dest_binary_PMATCH",
-  `!tm.
+Theorem dest_binary_PMATCH:
+   !tm.
      dest_binary nm tm =
        case tm of
          Comb (Comb (Const nm' _) l) r =>
@@ -469,12 +486,14 @@ val dest_binary_PMATCH = Q.store_thm("dest_binary_PMATCH",
            else
              let (ls, r) = dest_binary nm r in
                (l::ls, r)
-       | _ => ([], tm)`,
+       | _ => ([], tm)
+Proof
   CONV_TAC (DEPTH_CONV PMATCH_ELIM_CONV)
-  \\ simp [Once dest_binary_def]);
+  \\ simp [Once dest_binary_def]
+QED
 
-val dest_binder_PMATCH = Q.store_thm("dest_binder_PMATCH",
-  `!tm.
+Theorem dest_binder_PMATCH:
+   !tm.
      dest_binder nm tm =
        case tm of
          Comb (Const nm' _) (Abs (Var v _) b) =>
@@ -483,9 +502,10 @@ val dest_binder_PMATCH = Q.store_thm("dest_binder_PMATCH",
            else
              let (vs, r) = dest_binder nm b in
                (v::vs, r)
-       | _ => ([], tm)`,
+       | _ => ([], tm)
+Proof
   CONV_TAC (DEPTH_CONV PMATCH_ELIM_CONV)
-  \\ simp [Once dest_binder_def]);
+  \\ simp [Once dest_binder_def]
+QED
 
 val _ = export_theory ();
-

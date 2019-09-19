@@ -1,12 +1,17 @@
-open preamble stackLangTheory;
+(*
+  This compiler phase renames the registers to fit with the target
+  architecture.
+*)
+
+open preamble stackLangTheory
 
 val _ = new_theory "stack_names";
 
+val _ = set_grammar_ancestry["stackLang"];
+
 val _ = patternMatchesLib.ENABLE_PMATCH_CASES();
 
-(* Rename the registers to fit with the target architecture *)
-
-val _ = overload_on("find_name",``tlookup``);
+Overload find_name = ``tlookup``
 
 val ri_find_name_def = Define `
   (ri_find_name f (Reg r) = Reg (find_name f r)) /\
@@ -76,11 +81,12 @@ local val comp_quotation = `
 in
 val comp_def = Define comp_quotation
 
-val comp_pmatch = Q.store_thm("comp_pmatch",`∀f p.` @
-  (comp_quotation |>
-   map (fn QUOTE s => Portable.replace_string {from="dtcase",to="case"} s |> QUOTE
-       | aq => aq)),
-  rpt(
+Theorem comp_pmatch = Q.prove(
+  `∀f p.` @
+    (comp_quotation |>
+     map (fn QUOTE s => Portable.replace_string {from="dtcase",to="case"} s |> QUOTE
+         | aq => aq)),
+   rpt(
     rpt strip_tac
     >> CONV_TAC(RAND_CONV patternMatchesLib.PMATCH_ELIM_CONV)
     >> every_case_tac
