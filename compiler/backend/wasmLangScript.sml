@@ -318,6 +318,9 @@ val _ = Datatype `
     | Return
     | Call funcidx
     | Call_indirect typeidx`
+(* Tail Call Proposal *)
+    | Return_call funcidx
+    | Return_call_indirect typeidx
 
 (* Shortcuts for constants *)
 

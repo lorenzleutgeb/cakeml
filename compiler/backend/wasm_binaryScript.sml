@@ -162,6 +162,8 @@ val enc_instr_def = tDefine "enc_instr" `
     | Return          => [0x0Fw]
     | Call x          => [0x10w] ++ (enc_idx x)
     | Call_indirect x => [0x11w] ++ (enc_idx x) ++ [0x00w]
+    | Return_call x          => [0x12w] ++ (enc_idx x)
+    | Return_call_indirect x => [0x13w] ++ (enc_idx x) ++ [0x00w]
 (* 5.4.2  Parametric Instructions *)
     | Drop   => [0x1Aw]
     | Select => [0x1Bw]
